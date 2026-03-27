@@ -1,0 +1,29 @@
+@import 'tailwindcss';
+
+:root {
+  --color-primary: #e8845a;
+  --color-primary-dark: #d06840;
+  --color-primary-light: #fff0e8;
+  --color-bg-left: #fff8f4;
+  --color-border: #f0cdbb;
+  --color-badge-alert: #d94f35;
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #666666;
+  --color-text-muted: #888888;
+  --color-event-class-bg: #fff0e8;
+  --color-event-class-text: #b06040;
+  --color-event-meet-bg: #e6f1fb;
+  --color-event-meet-text: #185fa5;
+  --radius-card: 10px;
+  --radius-bubble: 12px;
+  --left-width: 220px;
+
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: var(--color-text-primary);
+}
+
+body {
+  margin: 0;
+  background: #fff;
+}
+
