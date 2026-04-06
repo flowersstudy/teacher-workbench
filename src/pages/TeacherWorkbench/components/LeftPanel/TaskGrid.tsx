@@ -1,19 +1,20 @@
-import { taskCounts, taskMeta } from '../../mock/workbenchMock'
+import { taskMeta } from '../../mock/workbenchMock'
 import type { TaskKey } from '../../types'
 import { useWorkbenchStore } from '../../store/workbenchStore'
 import { TaskCard } from './TaskCard'
 
 const orderedTasks: TaskKey[] = [
   'pendingClass',
-  'pendingReply',
-  'abnormalUser',
   'pendingReview',
+  'newStudent',
   'pendingAssign',
   'pendingLink',
+  'pendingHandout',
 ]
 
 export function TaskGrid() {
   const openTaskModal = useWorkbenchStore((s) => s.openTaskModal)
+  const taskCounts    = useWorkbenchStore((s) => s.taskCounts)
 
   return (
     <div className="p-4 pt-2">

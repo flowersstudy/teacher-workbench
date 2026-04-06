@@ -2,24 +2,36 @@
 
 :root {
   --color-primary: #e8845a;
-  --color-primary-dark: #d06840;
+  --color-primary-dark: #c96a3e;
   --color-primary-light: #fff0e8;
-  --color-bg-left: #fff8f4;
-  --color-border: #f0cdbb;
+  --color-bg-left: #fdf8f5;
+  --color-border: #edddd4;
   --color-badge-alert: #d94f35;
-  --color-text-primary: #1a1a1a;
-  --color-text-secondary: #666666;
-  --color-text-muted: #888888;
+  --color-text-primary: #1a1205;
+  --color-text-secondary: #5c5248;
+  --color-text-muted: #9a8e87;
   --color-event-class-bg: #fff0e8;
   --color-event-class-text: #b06040;
   --color-event-meet-bg: #e6f1fb;
   --color-event-meet-text: #185fa5;
-  --radius-card: 10px;
-  --radius-bubble: 12px;
-  --left-width: 220px;
+  --radius-card: 14px;
+  --radius-bubble: 14px;
+  --left-width: 380px;
+
+  /* shadow scale */
+  --shadow-xs: 0 1px 3px 0 rgba(60,30,10,.07);
+  --shadow-sm: 0 2px 8px 0 rgba(60,30,10,.10);
+  --shadow-md: 0 4px 16px 0 rgba(60,30,10,.13);
+
+  /* depth border (Duolingo-style bottom edge) */
+  --depth-primary: 0 3px 0 0 #c96a3e;
+  --depth-alert:   0 3px 0 0 #a83220;
+  --depth-neutral: 0 3px 0 0 #d8ccc5;
 
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-size: 120%;
   color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
 }
 
 body {

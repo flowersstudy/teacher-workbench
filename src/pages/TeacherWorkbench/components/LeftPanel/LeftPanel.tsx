@@ -3,11 +3,11 @@ import { TaskGrid } from './TaskGrid'
 import { MessageTabs } from './MessageTabs'
 import { ChatList } from './ChatList'
 
-export function LeftPanel() {
+export function LeftPanel({ onLogout }: { onLogout?: () => void }) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="shrink-0 border-b border-[var(--color-border)]">
-        <TeacherInfo />
+        <TeacherInfo onLogout={onLogout} />
       </div>
 
       <div className="shrink-0">
