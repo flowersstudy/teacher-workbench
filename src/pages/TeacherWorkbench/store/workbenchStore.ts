@@ -107,13 +107,15 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   openTaskKey: null,
   calendarEvents: initialEvents,
   teacherName: getTeacherNameFromToken(),
-  taskCounts: { pendingClass: 0, pendingReview: 0, newStudent: 0, pendingAssign: 0, pendingLink: 0, pendingHandout: 0 },
+  taskCounts: { pendingClass: 0, pendingReply: 0, abnormalUser: 0, pendingReview: 0, pendingAssign: 0, pendingLink: 0, newStudent: 0, pendingHandout: 0 },
   loadTaskCounts: async () => {
     const data = await api.get<{ pendingClass: number; pendingGrade: number; newStudents: number; abnormal: number }>('/api/teacher/tasks/count')
     if (data) {
       set({
         taskCounts: {
           pendingClass:   data.pendingClass  ?? 0,
+          pendingReply:   0,
+          abnormalUser:   data.abnormal      ?? 0,
           pendingReview:  data.pendingGrade  ?? 0,
           newStudent:     data.newStudents   ?? 0,
           pendingAssign:  0,

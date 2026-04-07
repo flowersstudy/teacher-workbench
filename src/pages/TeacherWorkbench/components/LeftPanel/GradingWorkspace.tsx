@@ -299,7 +299,7 @@ function AnswerPanel() {
       const scale    = Math.min((container.offsetWidth - 32) / naturalW, 1.8)
       const viewport = page.getViewport({ scale })
       canvas.width = viewport.width; canvas.height = viewport.height
-      await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise
+      await page.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport }).promise
     }
     render().catch(console.error)
     return () => { cancelled = true }
@@ -416,7 +416,7 @@ function StudentPdfPanel({ item }: { item: ReviewItem }) {
       const ann = annotRef.current
       if (ann) { ann.width = viewport.width; ann.height = viewport.height }
       setStrokes([]); setCurStroke(null); setTextAnns([])
-      await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise
+      await page.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport }).promise
     }
     render().catch(console.error)
     return () => { cancelled = true }
@@ -594,7 +594,7 @@ function ReportPanel({ submissionId, totalScore, notes, setNotes }: {
       const ann = annotRef.current
       if (ann) { ann.width = viewport.width; ann.height = viewport.height }
       setStrokes([]); setCurStroke(null); setTextAnns([])
-      await page.render({ canvasContext: pdfCanvas.getContext('2d')!, viewport }).promise
+      await page.render({ canvas: pdfCanvas, canvasContext: pdfCanvas.getContext('2d')!, viewport }).promise
     }
     renderPage().catch(console.error)
     return () => { cancelled = true }

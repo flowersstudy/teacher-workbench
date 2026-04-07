@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import { useState, useEffect, useRef } from 'react'
 import { useWorkbenchStore } from '../../store/workbenchStore'
+import { myDiagnosisStudents, myTeachingStudents } from '../../mock/workbenchMock'
 import type { ReviewItem } from '../../mock/workbenchMock'
 import { GradingWorkspace } from './GradingWorkspace'
 import { fetchSubmissions } from '../../api/submissions'
@@ -209,6 +210,12 @@ function ReviewRow({
 
 // ── submission → ReviewItem adapter ──────────────────────────────────────────
 const AVATAR_COLORS = ['#6366f1','#f59e0b','#10b981','#3b82f6','#ef4444','#8b5cf6','#ec4899']
+const reviewContactIdByName = Object.fromEntries(
+  [...myTeachingStudents, ...myDiagnosisStudents]
+    .filter((student) => student.contactId)
+    .map((student) => [student.name, student.contactId]),
+)
+
 function submissionToReviewItem(s: Submission, idx: number): ReviewItem {
   const colorIdx = idx % AVATAR_COLORS.length
   return {
@@ -216,6 +223,7 @@ function submissionToReviewItem(s: Submission, idx: number): ReviewItem {
     name:            s.student_name,
     avatar:          s.student_name.slice(-1),
     color:           AVATAR_COLORS[colorIdx],
+    contactId:       reviewContactIdByName[s.student_name] ?? '',
     reviewType:      s.review_type,
     checkpoint:      s.checkpoint,
     deadline:        s.deadline,

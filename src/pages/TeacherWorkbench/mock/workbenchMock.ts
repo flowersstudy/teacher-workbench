@@ -162,6 +162,7 @@ const colleagueContacts: ContactItem[] = [
 
 export const contactsByTab: Record<MessageTabKey, ContactItem[]> = {
   yesterdayUnreplied: [baseContacts[2], baseContacts[0]],
+  abnormalUsers: [],
   todayMessages: baseContacts,
   complaints: [
     {

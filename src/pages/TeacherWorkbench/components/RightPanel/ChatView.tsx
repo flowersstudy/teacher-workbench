@@ -329,8 +329,6 @@ const EMOJIS = [
   '🍎','🍕','☕','🎵','📚','💡','🏆','📝','⏰','🚀','🌟','💬','📌','🎯','🤓',
 ]
 
-const STICKER_BUCKET = 'stickers'
-
 interface StickerItem { id: string; url: string; name: string }
 
 function EmojiPicker({
@@ -349,12 +347,25 @@ function EmojiPicker({
   // TODO: 贴纸功能待接入文件上传接口
   useEffect(() => { setStickers([]) }, [])
 
-  async function uploadFiles(_files: File[]) {
-    // TODO: 接入 /api/upload 文件上传接口
+  async function uploadFiles(files: File[]) {
+    if (files.length === 0) return
+    setUploading(true)
+    try {
+      const imageFiles = files.filter((file) => file.type.startsWith('image/'))
+      if (imageFiles.length === 0) return
+      const nextStickers = imageFiles.map((file) => ({
+        id: `sticker_${Date.now()}_${file.name}`,
+        url: URL.createObjectURL(file),
+        name: file.name,
+      }))
+      setStickers((prev) => [...nextStickers, ...prev])
+    } finally {
+      setUploading(false)
+    }
   }
 
   async function deleteSticker(id: string, _url: string) {
-    // TODO: 接入删除接口
+    URL.revokeObjectURL(_url)
     setStickers((prev) => prev.filter((s) => s.id !== id))
   }
 

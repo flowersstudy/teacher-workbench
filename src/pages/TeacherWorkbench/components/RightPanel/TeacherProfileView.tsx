@@ -8,6 +8,7 @@ const statusConfig = {
   warning: { label: '异常',   cls: 'bg-red-100 text-red-500' },
   new:     { label: '新学员', cls: 'bg-[var(--color-primary-light)] text-[var(--color-primary)]' },
   leave:   { label: '已请假', cls: 'bg-gray-100 text-gray-500' },
+  completed: { label: '已结课', cls: 'bg-blue-100 text-blue-600' },
 }
 
 function MiniStudentCard({ student, onClick }: { student: StudentItem; onClick: () => void }) {
