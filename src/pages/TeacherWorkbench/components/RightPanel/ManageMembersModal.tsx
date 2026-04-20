@@ -5,11 +5,11 @@ import { useWorkbenchStore } from '../../store/workbenchStore'
 import type { GroupMember } from '../../types'
 
 const roleColor: Record<string, string> = {
-  '甯︽暀鑰佸笀': '#e8845a',
-  '璇婃柇鑰佸笀': '#4a90d9',
-  '瀛︾': '#4caf74',
-  '鏍￠暱': '#9c6fcc',
-  '瀛︾敓': '#888888',
+  '带教老师': '#e8845a',
+  '诊断老师': '#4a90d9',
+  '学管': '#4caf74',
+  '校长': '#9c6fcc',
+  '学生': '#888888',
 }
 
 export function ManageMembersModal() {
@@ -122,7 +122,7 @@ export function ManageMembersModal() {
                     <div className="text-xs font-semibold text-[var(--color-text-primary)]">{member.name}</div>
                     <div className="text-[10px] text-[var(--color-text-muted)]">{member.role}</div>
                   </div>
-                  {member.role !== '瀛︾敓' && (
+                  {member.role !== '学生' && (
                     <button
                       type="button"
                       onClick={() => void removeGroupMember(contactId, member)}

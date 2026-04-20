@@ -16,19 +16,19 @@ const studentStatusConfig = {
 }
 
 const roleBubbleStyle: Record<string, string> = {
-  '甯︽暀鑰佸笀': 'bg-[var(--color-primary)] text-white',
-  '瀛︾敓': 'bg-gray-100 text-[var(--color-text-primary)]',
-  '璇婃柇鑰佸笀': 'bg-[#e6f1fb] text-[#185fa5]',
-  '瀛︾': 'bg-[#e8f5e2] text-[#2d6a2d]',
-  '鏍￠暱': 'bg-[#f3e8ff] text-[#6b21a8]',
+  '带教老师': 'bg-[var(--color-primary)] text-white',
+  '学生': 'bg-gray-100 text-[var(--color-text-primary)]',
+  '诊断老师': 'bg-[#e6f1fb] text-[#185fa5]',
+  '学管': 'bg-[#e8f5e2] text-[#2d6a2d]',
+  '校长': 'bg-[#f3e8ff] text-[#6b21a8]',
 }
 
 const roleAvatarColor: Record<string, string> = {
-  '甯︽暀鑰佸笀': '#e8845a',
-  '瀛︾敓': '#888888',
-  '璇婃柇鑰佸笀': '#4a90d9',
-  '瀛︾': '#4caf74',
-  '鏍￠暱': '#9c6fcc',
+  '带教老师': '#e8845a',
+  '学生': '#888888',
+  '诊断老师': '#4a90d9',
+  '学管': '#4caf74',
+  '校长': '#9c6fcc',
 }
 
 const DAY_NAMES = ['日', '一', '二', '三', '四', '五', '六']
@@ -132,7 +132,7 @@ function Bubble({
   msg: ChatMessage
   onContextMenu: (event: React.MouseEvent) => void
 }) {
-  const isSelf = msg.sender === '甯︽暀鑰佸笀'
+  const isSelf = msg.sender === '带教老师'
   const bubbleCls = roleBubbleStyle[msg.sender] ?? 'bg-gray-100 text-[var(--color-text-primary)]'
   const avatarColor = roleAvatarColor[msg.sender] ?? '#888'
 
