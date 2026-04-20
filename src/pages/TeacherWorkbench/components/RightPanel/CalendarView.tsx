@@ -46,8 +46,8 @@ const DAY_NAMES  = ['日', '一', '二', '三', '四', '五', '六']
 const hours      = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i)
 
 const typeStyle: Record<CalEvent['type'], { bg: string; text: string; bar: string }> = {
-  class:   { bg: '#fff0e8', text: '#b06040', bar: '#e8845a' },
-  meeting: { bg: '#e6f1fb', text: '#185fa5', bar: '#4a90d9' },
+  class:   { bg: '#fff3ee', text: '#b75d37', bar: '#e8845a' },
+  meeting: { bg: '#f8f1eb', text: '#8e694f', bar: '#c69472' },
 }
 
 function parseMin(t: string) {
@@ -138,7 +138,7 @@ function EventFormModal({
               href={initial.link}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-lg bg-[#e8f4ff] px-3 py-2 text-xs font-semibold text-[#1677FF] hover:bg-[#d0eaff] transition-colors"
+              className="flex items-center gap-2 rounded-lg bg-[var(--color-primary-light)] px-3 py-2 text-xs font-semibold text-[var(--color-primary)] hover:opacity-85 transition-opacity"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -258,9 +258,6 @@ function LeaveFormModal({
     setRescheduleIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])
   }
 
-  // reset reschedule selection when date range changes
-  useEffect(() => { setRescheduleIds([]) }, [startDate, endDate])
-
   function handleSubmit() {
     onSubmit({
       id: `lv_${Date.now()}`,
@@ -284,7 +281,7 @@ function LeaveFormModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
           <div className="flex items-center gap-2">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e8845a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
             </svg>
             <span className="text-sm font-semibold text-[var(--color-text-primary)]">申请请假</span>
@@ -299,13 +296,20 @@ function LeaveFormModal({
             <div className="flex-1">
               <div className="mb-1 text-xs text-[var(--color-text-secondary)]">请假开始</div>
               <input type="date" value={startDate} min={today}
-                onChange={(e) => { setStartDate(e.target.value); if (e.target.value > endDate) setEndDate(e.target.value) }}
+                onChange={(e) => {
+                  setRescheduleIds([])
+                  setStartDate(e.target.value)
+                  if (e.target.value > endDate) setEndDate(e.target.value)
+                }}
                 className={inputCls} />
             </div>
             <div className="flex-1">
               <div className="mb-1 text-xs text-[var(--color-text-secondary)]">请假结束</div>
               <input type="date" value={endDate} min={startDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => {
+                  setRescheduleIds([])
+                  setEndDate(e.target.value)
+                }}
                 className={inputCls} />
             </div>
           </div>

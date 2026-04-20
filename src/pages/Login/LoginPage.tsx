@@ -1,6 +1,5 @@
 import { useState } from 'react'
-
-const API = 'http://localhost:3000'
+import { apiUrl } from '../../lib/apiBase'
 
 interface LoginPageProps {
   onLogin: (token: string) => void
@@ -20,6 +19,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [error,   setError]   = useState('')
   const [loading, setLoading] = useState(false)
   const [showPwd, setShowPwd] = useState(false)
+  const fieldClassName = 'w-full max-w-[320px]'
+  const inputClassName = 'h-12 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-left)] pl-10 pr-4 text-[15px] outline-none transition-colors focus:border-[var(--color-primary)] focus:bg-white placeholder:text-[var(--color-text-muted)]'
+  const passwordInputClassName = 'h-12 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-left)] pl-10 pr-12 text-[15px] outline-none transition-colors focus:border-[var(--color-primary)] focus:bg-white placeholder:text-[var(--color-text-muted)]'
 
   function reset() {
     setEmail(''); setPassword(''); setName(''); setConfirm(''); setError('')
@@ -38,7 +40,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
     setLoading(true)
     try {
-      const url  = mode === 'login' ? `${API}/api/auth/teacher/login` : `${API}/api/auth/teacher/register`
+      const url  = apiUrl(mode === 'login' ? '/api/auth/teacher/login' : '/api/auth/teacher/register')
       const body = mode === 'login'
         ? { email: email.trim(), password }
         : { name: name.trim(), email: email.trim(), password }
@@ -63,17 +65,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#fdf5f0] to-[#f0e8ff] px-4">
-      <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#f2fbf6] to-[#e8f7ef] px-4">
+      <div className="w-full max-w-[420px] overflow-hidden rounded-2xl bg-white shadow-2xl">
 
         {/* Top banner */}
         <div className="bg-[var(--color-primary)] px-6 py-6 text-white">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 mb-3">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
-          </div>
           <div className="text-lg font-bold leading-tight">带教老师工作台</div>
           <div className="mt-0.5 text-[13px] text-white/70">
             {mode === 'login' ? '请登录您的账号' : '创建新账号'}
@@ -97,11 +93,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           ))}
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col items-center px-6 py-6 space-y-4">
 
           {/* 姓名（注册时显示） */}
           {mode === 'register' && (
-            <div>
+            <div className={fieldClassName}>
               <label className="mb-1.5 block text-xs font-semibold text-[var(--color-text-secondary)]">姓名</label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-3 flex items-center text-[var(--color-text-muted)]">
@@ -112,15 +108,15 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 <input autoFocus type="text" value={name}
                   onChange={(e) => { setName(e.target.value); setError('') }}
                   placeholder="请输入您的姓名"
-                  className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-left)] py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-[var(--color-primary)] focus:bg-white placeholder:text-[var(--color-text-muted)]"
+                  className={inputClassName}
                 />
               </div>
             </div>
           )}
 
           {/* 邮箱 */}
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-[var(--color-text-secondary)]">邮箱</label>
+          <div className={fieldClassName}>
+            <label className="mb-1.5 block text-xs font-semibold text-[var(--color-text-secondary)]">账号</label>
             <div className="relative">
               <span className="absolute inset-y-0 left-3 flex items-center text-[var(--color-text-muted)]">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -129,14 +125,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               </span>
               <input autoFocus={mode === 'login'} type="email" autoComplete="email" value={email}
                 onChange={(e) => { setEmail(e.target.value); setError('') }}
-                placeholder="请输入邮箱"
-                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-left)] py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-[var(--color-primary)] focus:bg-white placeholder:text-[var(--color-text-muted)]"
+                placeholder="请输入账号"
+                className={inputClassName}
               />
             </div>
           </div>
 
           {/* 密码 */}
-          <div>
+          <div className={fieldClassName}>
             <label className="mb-1.5 block text-xs font-semibold text-[var(--color-text-secondary)]">密码</label>
             <div className="relative">
               <span className="absolute inset-y-0 left-3 flex items-center text-[var(--color-text-muted)]">
@@ -149,7 +145,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setError('') }}
                 placeholder={mode === 'register' ? '至少 6 位' : '请输入密码'}
-                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-left)] py-2.5 pl-9 pr-10 text-sm outline-none transition-colors focus:border-[var(--color-primary)] focus:bg-white placeholder:text-[var(--color-text-muted)]"
+                className={passwordInputClassName}
               />
               <button type="button" onClick={() => setShowPwd((v) => !v)}
                 className="absolute inset-y-0 right-3 flex items-center text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]">
@@ -168,7 +164,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
           {/* 确认密码（注册时显示） */}
           {mode === 'register' && (
-            <div>
+            <div className={fieldClassName}>
               <label className="mb-1.5 block text-xs font-semibold text-[var(--color-text-secondary)]">确认密码</label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-3 flex items-center text-[var(--color-text-muted)]">
@@ -179,7 +175,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 <input type={showPwd ? 'text' : 'password'} autoComplete="new-password" value={confirm}
                   onChange={(e) => { setConfirm(e.target.value); setError('') }}
                   placeholder="再次输入密码"
-                  className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-left)] py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-[var(--color-primary)] focus:bg-white placeholder:text-[var(--color-text-muted)]"
+                  className={inputClassName}
                 />
               </div>
             </div>
@@ -187,7 +183,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
           {/* Error */}
           {error && (
-            <div className="flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">
+            <div className={`${fieldClassName} flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600`}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
@@ -197,7 +193,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
           {/* Submit */}
           <button type="submit" disabled={loading}
-            className="w-full rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50">
+            className={`${fieldClassName} h-12 rounded-xl bg-[var(--color-primary)] text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50`}>
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

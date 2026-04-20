@@ -3,14 +3,16 @@ export type TaskKey =
   | 'pendingReply'
   | 'abnormalUser'
   | 'pendingReview'
+  | 'pendingLeave'
   | 'pendingAssign'
   | 'pendingLink'
   | 'newStudent'
   | 'pendingHandout'
+  | 'pendingFeedback'
 
 export type MessageTabKey = 'yesterdayUnreplied' | 'abnormalUsers' | 'todayMessages' | 'complaints' | 'colleagues'
 
-export type RightTabKey = 'schedule' | 'chat' | 'students' | 'overview' | 'scheduling'
+export type RightTabKey = 'schedule' | 'chat' | 'students' | 'mailbox' | 'overview' | 'scheduling'
 
 export interface ContactItem {
   id: string
@@ -22,6 +24,11 @@ export interface ContactItem {
   unreadCount: number
   tag?: 'complaint'
   contactType?: 'student' | 'colleague'
+  subtitle?: string
+  studentId?: string
+  studentStatus?: 'normal' | 'warning' | 'new' | 'leave' | 'completed'
+  lastMessageAt?: string | null
+  lastSenderType?: 'teacher' | 'student' | null
 }
 
 export interface TaskListItem {
@@ -36,6 +43,7 @@ export interface TaskListItem {
   studentId?: string
   eventId?: string
   linkType?: 'class' | 'replay'
+  feedbackId?: string
 }
 
 export interface CalEvent {
@@ -50,12 +58,14 @@ export interface CalEvent {
 
 export interface ChatMessage {
   id: string
+  clientId?: string
   contactId: string
   sender: GroupRole
   senderName: string
   text: string
   time: string
   date?: string        // yyyy-MM-dd
+  pending?: boolean
   recalled?: boolean
   replyTo?: { id: string; senderName: string; text: string }
   msgType?: 'text' | 'image' | 'file' | 'audio'
@@ -70,6 +80,7 @@ export type GroupRole = '带教老师' | '学管' | '校长' | '诊断老师' | 
 export interface GroupMember {
   role: GroupRole
   name: string
+  teacherId?: string
 }
 
 export interface ContactNote {
@@ -78,6 +89,95 @@ export interface ContactNote {
   authorName: string
   text: string
   createdAt: string   // ISO 字符串
+}
+
+export interface AbnormalStudent {
+  id: string
+  name: string
+  status: 'normal' | 'warning' | 'new' | 'leave' | 'completed'
+  reason: string
+  severity: 'high' | 'medium' | 'low'
+  updatedAt: string
+}
+
+export interface StudentItem {
+  id: string
+  name: string
+  avatar: string
+  color: string
+  grade: string
+  subject: string
+  lastSession: string
+  status: 'normal' | 'warning' | 'new' | 'leave' | 'completed'
+  contactId?: string
+}
+
+export interface KpointAssignment {
+  title: string
+  score: number
+  accuracy: number
+  date: string
+}
+
+export interface KnowledgePoint {
+  name: string
+  progress: number
+  status: 'mastered' | 'learning' | 'weak'
+  assignments?: KpointAssignment[]
+}
+
+export interface StudentFeedback {
+  id: string
+  sessionLabel: string
+  date: string
+  rating: number
+  tags: string[]
+  comment: string
+}
+
+export type AnswerStatus = 'pending' | 'reviewed'
+export type QuestionType = '入学诊断' | '卡点练习题' | '卡点考试' | '整卷批改'
+
+export interface QuestionAnswer {
+  id: string
+  questionTitle: string
+  questionType: QuestionType
+  studentAnswer: string
+  submittedAt: string
+  status: AnswerStatus
+  score?: number
+  teacherComment?: string
+  reviewedAt?: string
+}
+
+export interface TeacherNote {
+  role: string
+  name: string
+  content: string
+  date: string
+}
+
+export interface Handout {
+  id: string
+  fileName: string
+  uploadedBy: string
+  role: string
+  date: string
+  sessionLabel: string
+}
+
+export interface Replay {
+  id: string
+  sessionLabel: string
+  date: string
+  url: string
+  duration?: string
+}
+
+export interface KpointTeacherGroup {
+  kpoint: string
+  color: string
+  teachers: { role: string; name: string }[]
 }
 
 export interface PrivateChatSession {
@@ -120,6 +220,42 @@ export interface StudentInfoItem {
   authorRole: string
   content: string
   createdAt: string   // ISO 字符串
+}
+
+export interface StudentCourseProgress {
+  id: string
+  name: string
+  subject: string
+  progress: number
+  status: 'in_progress' | 'completed' | 'failed'
+}
+
+export interface StudentTeamTeacher {
+  id: string
+  name: string
+  role: string
+  title?: string
+  status?: string
+}
+
+export interface StudentDetailMeta {
+  joinDate: string | null
+  sessionCount: number
+  totalHours: number
+  courses: StudentCourseProgress[]
+  teamTeachers: StudentTeamTeacher[]
+  profile: {
+    gender?: string | null
+    grade?: string | null
+    hometown?: string | null
+    examStatus?: string | null
+    examDate?: string | null
+    education?: string | null
+    major?: string | null
+    avatarUrl?: string | null
+  }
+  flagReason?: string | null
+  flagSeverity?: string | null
 }
 
 export interface ComplaintAttachment {

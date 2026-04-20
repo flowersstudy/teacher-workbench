@@ -719,8 +719,8 @@ TeacherWorkbench 挂载时执行（useEffect）：
 
 当 API 请求失败时：
 - 日历、任务计数 → 保持上次数据（不清空）
-- 学生列表 → 使用 mock 数据（当前版本）
-- 聊天消息 → 使用 mock 数据（当前版本）
+- 学生列表 → 使用真实接口数据（当前版本）
+- 聊天消息 → 使用真实接口 / WebSocket 数据（当前版本）
 
 ---
 
@@ -796,7 +796,7 @@ TeacherWorkbench 挂载时执行（useEffect）：
 
 ### 7.4 投诉附件
 
-- 文件上传转为 base64 存储（前端 mock 版本）
+- 文件上传当前转为 base64 本地预览存储（待后端持久化版本）
 - 无大小限制（当前版本）
 - 支持多个文件
 
@@ -1086,9 +1086,9 @@ type RightTabKey = 'schedule' | 'chat' | 'students' | 'overview' | 'scheduling'
 
 | 功能 | 当前状态 |
 |------|---------|
-| 学生列表 | Mock 数据，接口已有 |
-| 聊天消息 | Mock 数据，WebSocket 后端已有 |
-| 任务列表 | Mock 数据 |
+| 学生列表 | 真实接口数据 |
+| 聊天消息 | 真实接口 + WebSocket 数据 |
+| 任务列表 | 真实接口数据 |
 | 投诉管理 | 前端状态存 Zustand，未持久化到数据库 |
 | 练习题分配 | 前端状态存 Zustand，未持久化到数据库 |
 | 卡点课进度 | 前端状态存 Zustand，未持久化到数据库 |
@@ -1104,7 +1104,7 @@ type RightTabKey = 'schedule' | 'chat' | 'students' | 'overview' | 'scheduling'
 | 多语言 | 当前仅中文 |
 | 消息推送（WebSocket） | 后端已有 WS 服务，前端未接入 |
 | 排课功能（SchedulingView） | 入口存在，内容未实现 |
-| 聊天总览（OverviewView） | 功能存在，数据为 mock |
+| 聊天总览（OverviewView） | 功能存在，数据来自真实接口汇总 |
 
 ---
 

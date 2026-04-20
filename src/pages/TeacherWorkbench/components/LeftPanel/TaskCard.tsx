@@ -20,18 +20,19 @@ export function TaskCard({
       type="button"
       onClick={() => onClick(taskKey)}
       className={[
-        'flex h-[72px] w-full flex-col justify-between rounded-lg px-3 py-2.5 text-left',
-        'border bg-white transition-colors duration-150 hover:bg-[var(--color-bg-left)]',
+        'flex h-[84px] w-full flex-col justify-between rounded-[var(--radius-card)] border bg-white px-4 py-3 text-left shadow-[var(--shadow-xs)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[var(--color-bg-left)]',
         isAlert ? 'border-[var(--color-badge-alert)]' : 'border-[var(--color-border)]',
       ].join(' ')}
     >
-      <div className={[
-        'text-lg font-bold leading-none',
-        isAlert ? 'text-[var(--color-badge-alert)]' : 'text-[var(--color-primary)]',
-      ].join(' ')}>
-        {count > 0 ? count : '–'}
+      <div
+        className={[
+          'text-2xl font-bold leading-none',
+          isAlert ? 'text-[var(--color-badge-alert)]' : 'text-[var(--color-primary)]',
+        ].join(' ')}
+      >
+        {count > 0 ? count : '—'}
       </div>
-      <div className="text-xs font-medium text-[var(--color-text-primary)] leading-tight">
+      <div className="text-xs font-semibold leading-tight text-[var(--color-text-primary)]">
         {label}
       </div>
     </button>

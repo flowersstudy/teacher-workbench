@@ -1,20 +1,11 @@
-import { taskMeta } from '../../mock/workbenchMock'
-import type { TaskKey } from '../../types'
+import { taskMeta } from '../../config/taskConfig'
+import { ENABLED_TASK_KEYS } from '../../config/launch'
 import { useWorkbenchStore } from '../../store/workbenchStore'
 import { TaskCard } from './TaskCard'
 
-const orderedTasks: TaskKey[] = [
-  'pendingClass',
-  'pendingReview',
-  'newStudent',
-  'pendingAssign',
-  'pendingLink',
-  'pendingHandout',
-]
-
 export function TaskGrid() {
   const openTaskModal = useWorkbenchStore((s) => s.openTaskModal)
-  const taskCounts    = useWorkbenchStore((s) => s.taskCounts)
+  const taskCounts = useWorkbenchStore((s) => s.taskCounts)
 
   return (
     <div className="p-4 pt-2">
@@ -22,7 +13,7 @@ export function TaskGrid() {
         今日任务
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3">
-        {orderedTasks.map((taskKey) => (
+        {ENABLED_TASK_KEYS.map((taskKey) => (
           <TaskCard
             key={taskKey}
             taskKey={taskKey}
@@ -36,4 +27,3 @@ export function TaskGrid() {
     </div>
   )
 }
-

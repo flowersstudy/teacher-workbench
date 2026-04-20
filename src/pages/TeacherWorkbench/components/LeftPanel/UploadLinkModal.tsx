@@ -98,7 +98,7 @@ export function UploadLinkModal() {
             <button
               type="button"
               onClick={openMeeting}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#1677FF] py-2.5 text-sm font-semibold text-white hover:bg-[#0e6ae0] transition-colors"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white hover:bg-[var(--color-primary-dark)] transition-colors"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />

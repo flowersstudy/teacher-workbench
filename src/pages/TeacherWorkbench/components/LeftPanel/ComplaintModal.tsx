@@ -2,7 +2,7 @@ import { createPortal } from 'react-dom'
 import { useState, useRef } from 'react'
 import { useWorkbenchStore } from '../../store/workbenchStore'
 import type { ComplaintAttachment } from '../../types'
-import type { StudentItem } from '../../mock/workbenchMock'
+import type { StudentItem } from '../../types'
 
 const STEP_LABELS = ['学生诉求', '投诉原因', '解决建议', '截止时间', '附件信息']
 
@@ -60,21 +60,23 @@ export function ComplaintModal({ student, onClose }: { student: StudentItem; onC
 
   function handleSubmit() {
     setSubmitting(true)
-    addComplaint({
+    void addComplaint({
       studentId: student.id,
       studentName: student.name,
       demand: demand.trim(),
       reason: reason.trim(),
       suggestion: suggestion.trim(),
-      resolvers: resolvers.map((k) => k.split('__')[0]),   // store clean names
+      resolvers: resolvers.map((k) => k.split('__')[0]),
       deadline,
       extraNote: extraNote.trim(),
       attachments,
-      submittedBy: '诊断老师',
+      submittedBy: '老师',
+    }).then(() => {
+      setDone(true)
+      setTimeout(onClose, 1400)
+    }).finally(() => {
+      setSubmitting(false)
     })
-    setDone(true)
-    setSubmitting(false)
-    setTimeout(onClose, 1400)
   }
 
   function renderStep() {

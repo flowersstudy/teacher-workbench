@@ -2,7 +2,6 @@ import { createPortal } from 'react-dom'
 import { useEffect, useRef, useState } from 'react'
 import { format } from 'date-fns'
 import { useWorkbenchStore } from '../../store/workbenchStore'
-import { teacher } from '../../mock/workbenchMock'
 
 export function NotesModal({ contactName }: { contactName: string }) {
   const notesContactId = useWorkbenchStore((s) => s.notesContactId)
@@ -11,6 +10,7 @@ export function NotesModal({ contactName }: { contactName: string }) {
   const addNote        = useWorkbenchStore((s) => s.addNote)
   const deleteNote     = useWorkbenchStore((s) => s.deleteNote)
   const loadNotes      = useWorkbenchStore((s) => s.loadNotes)
+  const teacherName    = useWorkbenchStore((s) => s.teacherName)
 
   const [draft, setDraft] = useState('')
   const [saving, setSaving] = useState(false)
@@ -36,7 +36,7 @@ export function NotesModal({ contactName }: { contactName: string }) {
     const text = draft.trim()
     if (!text || !notesContactId) return
     setSaving(true)
-    await addNote(notesContactId, text, teacher.name)
+    await addNote(notesContactId, text, teacherName || '老师')
     setDraft('')
     setSaving(false)
   }

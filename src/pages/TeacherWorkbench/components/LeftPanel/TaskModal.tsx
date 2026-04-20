@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom'
-import { taskItemsByKey, taskMeta } from '../../mock/workbenchMock'
+import { taskMeta } from '../../config/taskConfig'
 import { useWorkbenchStore } from '../../store/workbenchStore'
 
 function ItemAvatar({ avatar, color }: { avatar: string; color: string }) {
@@ -22,11 +22,12 @@ export function TaskModal() {
   const openReplayUpload  = useWorkbenchStore((s) => s.openReplayUpload)
   const openStudentProfile  = useWorkbenchStore((s) => s.openStudentProfile)
   const openAssignStudent   = useWorkbenchStore((s) => s.openAssignStudent)
+  const taskItemsMap        = useWorkbenchStore((s) => s.taskItemsMap)
 
-  if (!openTaskKey || openTaskKey === 'pendingReview' || openTaskKey === 'abnormalUser') return null
+  if (!openTaskKey || openTaskKey === 'pendingReview' || openTaskKey === 'abnormalUser' || openTaskKey === 'pendingFeedback') return null
 
   const title = taskMeta[openTaskKey].label
-  const items = taskItemsByKey[openTaskKey]
+  const items = taskItemsMap[openTaskKey] || []
 
   return createPortal(
     <div

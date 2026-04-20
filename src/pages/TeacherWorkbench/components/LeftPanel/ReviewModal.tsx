@@ -1,11 +1,9 @@
 import { createPortal } from 'react-dom'
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useWorkbenchStore } from '../../store/workbenchStore'
-import { myDiagnosisStudents, myTeachingStudents } from '../../mock/workbenchMock'
-import type { ReviewItem } from '../../mock/workbenchMock'
 import { GradingWorkspace } from './GradingWorkspace'
 import { fetchSubmissions } from '../../api/submissions'
-import type { Submission } from '../../api/submissions'
+import type { ReviewItem, Submission } from '../../api/submissions'
 
 // ── config ────────────────────────────────────────────────────────────────────
 const priorityCfg = {
@@ -210,13 +208,7 @@ function ReviewRow({
 
 // ── submission → ReviewItem adapter ──────────────────────────────────────────
 const AVATAR_COLORS = ['#6366f1','#f59e0b','#10b981','#3b82f6','#ef4444','#8b5cf6','#ec4899']
-const reviewContactIdByName = Object.fromEntries(
-  [...myTeachingStudents, ...myDiagnosisStudents]
-    .filter((student) => student.contactId)
-    .map((student) => [student.name, student.contactId]),
-)
-
-function submissionToReviewItem(s: Submission, idx: number): ReviewItem {
+function submissionToReviewItem(s: Submission, idx: number, reviewContactIdByName: Record<string, string>): ReviewItem {
   const colorIdx = idx % AVATAR_COLORS.length
   return {
     id:              s.id,
@@ -237,22 +229,33 @@ function submissionToReviewItem(s: Submission, idx: number): ReviewItem {
 export function ReviewModal() {
   const openTaskKey    = useWorkbenchStore((s) => s.openTaskKey)
   const close          = useWorkbenchStore((s) => s.closeTaskModal)
+  const students       = useWorkbenchStore((s) => s.students)
+  const chatContacts   = useWorkbenchStore((s) => s.chatContacts)
 
   const [activeTab, setActiveTab]   = useState<typeof TYPE_TABS[number]>('全部')
   const [sortBy, setSortBy]         = useState<'priority' | 'time'>('priority')
   const [gradingItem, setGradingItem] = useState<ReviewItem | null>(null)
   const [items, setItems]           = useState<ReviewItem[]>([])
   const [loading, setLoading]       = useState(false)
+  const reviewContactIdByName = useMemo(() => (
+    students.reduce<Record<string, string>>((acc, student) => {
+      const contactId = chatContacts.find((contact) => contact.studentId === student.id)?.id
+      if (contactId) {
+        acc[student.name] = contactId
+      }
+      return acc
+    }, {})
+  ), [chatContacts, students])
 
   // Load from API whenever modal opens
   useEffect(() => {
     if (openTaskKey !== 'pendingReview') return
     setLoading(true)
     fetchSubmissions()
-      .then((list) => setItems(list.map(submissionToReviewItem)))
+      .then((list) => setItems(list.map((submission, index) => submissionToReviewItem(submission, index, reviewContactIdByName))))
       .catch(() => {/* keep empty list */})
       .finally(() => setLoading(false))
-  }, [openTaskKey])
+  }, [openTaskKey, reviewContactIdByName])
 
   if (openTaskKey !== 'pendingReview') return null
 

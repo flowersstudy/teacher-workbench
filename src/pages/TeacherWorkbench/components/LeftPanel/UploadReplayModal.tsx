@@ -7,20 +7,28 @@ type ReplayCategory = '诊断课' | '卡点课'
 export function UploadReplayModal() {
   const item = useWorkbenchStore((s) => s.replayUploadItem)
   const close = useWorkbenchStore((s) => s.closeReplayUpload)
+  const uploadReplayMaterial = useWorkbenchStore((s) => s.uploadReplayMaterial)
   const [category, setCategory] = useState<ReplayCategory>('卡点课')
   const [link, setLink] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   if (!item) return null
 
-  function handleSubmit() {
-    if (!link.trim()) return
-    setSubmitted(true)
-    setTimeout(() => {
-      setSubmitted(false)
-      setLink('')
-      close()
-    }, 1200)
+  async function handleSubmit() {
+    if (!link.trim() || !item?.eventId) return
+    setSubmitting(true)
+    try {
+      await uploadReplayMaterial(item.eventId, category, link.trim())
+      setSubmitted(true)
+      setTimeout(() => {
+        setSubmitted(false)
+        setLink('')
+        close()
+      }, 900)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return createPortal(
@@ -78,7 +86,7 @@ export function UploadReplayModal() {
               href="https://meeting.tencent.com/user-center/record"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 rounded-lg bg-[#1677FF] py-2.5 text-sm font-semibold text-white hover:bg-[#0e6ae0] transition-colors"
+              className="flex items-center justify-center gap-2 rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white hover:bg-[var(--color-primary-dark)] transition-colors"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
@@ -103,8 +111,8 @@ export function UploadReplayModal() {
 
           <button
             type="button"
-            onClick={handleSubmit}
-            disabled={!link.trim() || submitted}
+            onClick={() => void handleSubmit()}
+            disabled={!link.trim() || submitted || submitting}
             className={[
               'w-full rounded-lg py-2 text-sm font-semibold transition-colors',
               submitted
@@ -114,7 +122,7 @@ export function UploadReplayModal() {
                   : 'bg-gray-100 text-gray-400 cursor-not-allowed',
             ].join(' ')}
           >
-            {submitted ? '上传成功 ✓' : '确认上传'}
+            {submitted ? '上传成功 ✓' : submitting ? '上传中…' : '确认上传'}
           </button>
         </div>
       </div>

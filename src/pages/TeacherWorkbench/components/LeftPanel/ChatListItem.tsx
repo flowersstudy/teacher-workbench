@@ -1,13 +1,8 @@
 import type { ContactItem } from '../../types'
-import { contactIdToStudentId, myDiagnosisStudents, myTeachingStudents } from '../../mock/workbenchMock'
-
-const allStudentsById = Object.fromEntries(
-  [...myTeachingStudents, ...myDiagnosisStudents].map((s) => [s.id, s]),
-)
 
 const statusConfig = {
-  normal:    { label: '正常',   cls: 'bg-green-100 text-green-600' },
-  warning:   { label: '异常',   cls: 'bg-red-100 text-red-500' },
+  normal:    { label: '正常', cls: 'bg-green-100 text-green-600' },
+  warning:   { label: '异常', cls: 'bg-red-100 text-red-500' },
   new:       { label: '新学员', cls: 'bg-[var(--color-primary-light)] text-[var(--color-primary)]' },
   leave:     { label: '已请假', cls: 'bg-gray-100 text-gray-500' },
   completed: { label: '已完成', cls: 'bg-teal-50 text-teal-700' },
@@ -22,10 +17,8 @@ export function ChatListItem({
   selected: boolean
   onClick: () => void
 }) {
-  const hasUnread  = item.unreadCount > 0
-  const studentId  = contactIdToStudentId[item.id]
-  const student    = studentId ? allStudentsById[studentId] : null
-  const statusCfg  = student ? statusConfig[student.status] : null
+  const hasUnread = item.unreadCount > 0
+  const statusCfg = item.studentStatus ? statusConfig[item.studentStatus] : null
 
   return (
     <button
@@ -71,8 +64,8 @@ export function ChatListItem({
           <div className={[
             'flex items-center justify-center rounded-full bg-red-500 text-white font-bold leading-none',
             item.unreadCount > 99 ? 'min-w-[18px] px-1 h-[18px] text-[9px]' :
-            item.unreadCount > 9  ? 'min-w-[18px] px-1 h-[18px] text-[10px]' :
-                                    'h-4 w-4 text-[10px]',
+            item.unreadCount > 9 ? 'min-w-[18px] px-1 h-[18px] text-[10px]' :
+              'h-4 w-4 text-[10px]',
           ].join(' ')}>
             {item.unreadCount > 99 ? '99+' : item.unreadCount}
           </div>

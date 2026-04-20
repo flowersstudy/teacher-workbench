@@ -1,9 +1,8 @@
 import { useWorkbenchStore } from '../../store/workbenchStore'
 
 export function TeacherInfo({ onLogout }: { onLogout?: () => void }) {
-  const openTaskModal = useWorkbenchStore((s) => s.openTaskModal)
-  const teacherName   = useWorkbenchStore((s) => s.teacherName)
-  const pendingClass  = useWorkbenchStore((s) => s.taskCounts.pendingClass)
+  const teacherName = useWorkbenchStore((s) => s.teacherName)
+  const pendingClass = useWorkbenchStore((s) => s.taskCounts.pendingClass)
 
   const displayName = teacherName || '老师'
 
@@ -15,13 +14,9 @@ export function TeacherInfo({ onLogout }: { onLogout?: () => void }) {
 
       <div className="min-w-0 flex-1">
         <div className="text-sm font-semibold text-[var(--color-text-primary)]">{displayName}</div>
-        <button
-          type="button"
-          onClick={() => openTaskModal('pendingClass')}
-          className="mt-0.5 text-xs text-[var(--color-primary)] hover:underline"
-        >
-          今日带教 {pendingClass} 人 →
-        </button>
+        <div className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+          今日带教 {pendingClass} 人
+        </div>
       </div>
 
       {onLogout && (

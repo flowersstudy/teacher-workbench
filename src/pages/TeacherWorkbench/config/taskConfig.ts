@@ -1,0 +1,17 @@
+import type { TaskKey } from '../types'
+
+export const taskMeta: Record<
+  TaskKey,
+  { label: string; badgeTone?: 'alert' }
+> = {
+  pendingClass: { label: '待上课' },
+  pendingReply: { label: '待回复' },
+  abnormalUser: { label: '异常学员', badgeTone: 'alert' },
+  pendingReview: { label: '待批改' },
+  pendingLeave: { label: '请假审批', badgeTone: 'alert' },
+  pendingAssign: { label: '待分配学员' },
+  pendingLink: { label: '待上传链接' },
+  newStudent: { label: '新增学生' },
+  pendingHandout: { label: '待上传讲义' },
+  pendingFeedback: { label: '学生反馈' },
+}

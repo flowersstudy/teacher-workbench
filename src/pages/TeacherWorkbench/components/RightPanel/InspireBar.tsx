@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { inspirePhrases } from '../../mock/workbenchMock'
+import { inspirePhrases } from '../../config/inspirePhrases'
 
 function pickNext(pool: string[], current: string) {
   if (pool.length <= 1) return current
@@ -43,4 +43,3 @@ export function InspireBar() {
     </div>
   )
 }
-

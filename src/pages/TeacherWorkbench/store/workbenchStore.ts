@@ -1,8 +1,7 @@
 import { create } from 'zustand'
-import type { CalEvent, ChatMessage, ComplaintRecord, ContactNote, GroupMember, MessageTabKey, PrivateChatSession, RightTabKey, StudentInfoItem, TaskKey, TaskListItem } from '../types'
-import { calendarEvents as initialEvents, defaultStudentPracticeAssignments, groupMembersByContactId as initialGroupMembers } from '../mock/workbenchMock'
-import type { StudentItem } from '../mock/workbenchMock'
+import type { AbnormalStudent, CalEvent, ChatMessage, ComplaintRecord, ContactNote, GroupMember, MessageTabKey, PrivateChatSession, QuestionAnswer, RightTabKey, StudentDetailMeta, StudentInfoItem, StudentItem, TaskKey, TaskListItem } from '../types'
 import { api } from '../../../lib/api'
+import { addChatMember, buildChatSocketUrl, fetchChatMembers, fetchChatMessages, fetchChatRooms, mapSocketChatMessage, postChatMessage, removeChatMember } from '../api/chat'
 
 function getTeacherNameFromToken(): string {
   try {
@@ -15,7 +14,176 @@ function getTeacherNameFromToken(): string {
   }
 }
 
-const STUDENT_COLORS = ['#e8845a','#6b9e78','#7b8fc4','#c4847b','#9b84c4','#84b8c4','#c4b484','#84c4a4']
+const STUDENT_COLORS = ['#e8845a', '#d79c69', '#c48b7a', '#b58f6f', '#c8755c', '#9f7d69', '#d3a57c', '#b88d77']
+const MESSAGE_ACK_TIMEOUT = 5000
+
+let activeChatSocket: WebSocket | null = null
+let activeChatRoomId: string | null = null
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let reconnectAttempts = 0
+let shouldReconnect = false
+const pendingAckTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function clearReconnectTimer() {
+  if (!reconnectTimer) return
+  clearTimeout(reconnectTimer)
+  reconnectTimer = null
+}
+
+function clearPendingAckTimer(clientId?: string | null) {
+  if (!clientId) return
+  const timer = pendingAckTimers.get(clientId)
+  if (!timer) return
+  clearTimeout(timer)
+  pendingAckTimers.delete(clientId)
+}
+
+function mapComplaintRecord(item: Record<string, unknown>): ComplaintRecord {
+  return {
+    id: String(item.id),
+    studentId: String(item.studentId ?? item.student_id ?? ''),
+    studentName: String(item.studentName ?? item.student_name ?? ''),
+    demand: String(item.demand ?? ''),
+    reason: String(item.reason ?? ''),
+    suggestion: String(item.suggestion ?? ''),
+    resolvers: Array.isArray(item.resolvers) ? item.resolvers.map((entry) => String(entry)) : [],
+    deadline: String(item.deadline ?? ''),
+    extraNote: String(item.extraNote ?? item.extra_note ?? ''),
+    attachments: Array.isArray(item.attachments)
+      ? item.attachments.map((entry) => ({
+        id: String((entry as Record<string, unknown>).id ?? ''),
+        name: String((entry as Record<string, unknown>).name ?? ''),
+        dataUrl: String((entry as Record<string, unknown>).dataUrl ?? ''),
+      }))
+      : [],
+    submittedBy: String(item.submittedBy ?? item.submitted_by ?? ''),
+    submittedAt: String(item.submittedAt ?? item.created_at ?? ''),
+    status: item.status === 'resolved' ? 'resolved' : 'pending',
+    resolvedAt: item.resolvedAt ? String(item.resolvedAt) : undefined,
+    resolvedNote: item.resolvedNote ? String(item.resolvedNote) : undefined,
+  }
+}
+
+function findMessageIndex(messages: ChatMessage[], target: ChatMessage): number {
+  return messages.findIndex((item) =>
+    item.id === target.id
+    || (Boolean(item.clientId) && item.clientId === target.id)
+    || (Boolean(target.clientId) && item.id === target.clientId)
+    || (Boolean(item.clientId) && Boolean(target.clientId) && item.clientId === target.clientId),
+  )
+}
+
+function mergeMessages(existing: ChatMessage[], incoming: ChatMessage[], prepend: boolean): ChatMessage[] {
+  const result = [...existing]
+  const orderedIncoming = prepend ? [...incoming].reverse() : incoming
+
+  orderedIncoming.forEach((item) => {
+    const index = findMessageIndex(result, item)
+    if (index >= 0) {
+      const current = result[index]
+      result[index] = {
+        ...current,
+        ...item,
+        replyTo: item.replyTo ?? current.replyTo,
+        pending: item.pending ?? current.pending,
+      }
+      return
+    }
+
+    if (prepend) {
+      result.unshift(item)
+    } else {
+      result.push(item)
+    }
+  })
+
+  return result
+}
+
+function findReplyTarget(messages: ChatMessage[], replyToId?: string | null): ChatMessage | null {
+  if (!replyToId) return null
+  return messages.find((item) => item.id === replyToId || item.clientId === replyToId) ?? null
+}
+
+function buildReplyPreview(messages: ChatMessage[], replyToId?: string | null): ChatMessage['replyTo'] {
+  const replyTarget = findReplyTarget(messages, replyToId)
+  return replyTarget
+    ? { id: replyTarget.id, senderName: replyTarget.senderName, text: replyTarget.text }
+    : undefined
+}
+
+function findPendingMessage(messages: ChatMessage[], clientId: string): ChatMessage | null {
+  return messages.find((item) => item.clientId === clientId || item.id === clientId) ?? null
+}
+
+function messageTimestamp(message: ChatMessage): string | null {
+  return message.date ? `${message.date}T${message.time}:00` : null
+}
+
+function updateChatContactPreview(
+  contacts: import('../types').ContactItem[],
+  contactId: string,
+  message: ChatMessage,
+  senderType: 'teacher' | 'student',
+  isSelectedRoom: boolean,
+): import('../types').ContactItem[] {
+  return contacts.map((item) =>
+    item.id === contactId
+      ? {
+          ...item,
+          preview: message.text,
+          time: message.time,
+          lastSenderType: senderType,
+          lastMessageAt: messageTimestamp(message) ?? item.lastMessageAt,
+          unreadCount: senderType === 'student' && !isSelectedRoom ? (item.unreadCount ?? 0) + 1 : 0,
+        }
+      : item,
+  )
+}
+
+function contactIdByStudentId(contacts: import('../types').ContactItem[]): Record<string, string> {
+  return contacts.reduce<Record<string, string>>((acc, item) => {
+    if (item.studentId) acc[item.studentId] = item.id
+    return acc
+  }, {})
+}
+
+function mapTeamRole(role: string | null | undefined): string {
+  switch (role) {
+    case 'coach':
+      return '带教老师'
+    case 'diagnosis':
+      return '诊断老师'
+    case 'manager':
+      return '学管'
+    case 'principal':
+      return '校长'
+    default:
+      return role || '老师'
+  }
+}
+
+function mapSubmissionReviewType(reviewType: string | null | undefined): QuestionAnswer['questionType'] {
+  switch (reviewType) {
+    case '入学诊断':
+    case '卡点练习题':
+    case '卡点考试':
+    case '整卷批改':
+      return reviewType
+    case '二阶试卷':
+      return '整卷批改'
+    default:
+      return '整卷批改'
+  }
+}
+
+function buildSubmissionTitle(reviewType: unknown, checkpoint: unknown, fileName: unknown): string {
+  const fileTitle = typeof fileName === 'string' ? fileName.replace(/\.[^.]+$/, '') : ''
+  if (fileTitle) return fileTitle
+
+  const parts = [reviewType, checkpoint].filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+  return parts.join(' · ') || '作答记录'
+}
 
 interface WorkbenchState {
   leftMessageTab: MessageTabKey
@@ -27,8 +195,19 @@ interface WorkbenchState {
   teacherName: string
   taskCounts: Record<TaskKey, number>
   loadTaskCounts: () => Promise<void>
+  taskItemsMap: Record<TaskKey, TaskListItem[]>
+  loadTaskItems: () => Promise<void>
   students: StudentItem[]
   loadStudents: () => Promise<void>
+  abnormalStudents: AbnormalStudent[]
+  loadAbnormalStudents: () => Promise<void>
+  chatContacts: import('../types').ContactItem[]
+  loadChatContacts: () => Promise<void>
+  chatMessagesMap: Record<string, ChatMessage[]>
+  loadChatMessages: (contactId: string, before?: string) => Promise<number>
+  sendChatMessage: (contactId: string, text: string, replyToId?: string | null) => Promise<ChatMessage | null>
+  connectChatRoom: (contactId: string) => void
+  disconnectChatRoom: () => void
 
   setLeftMessageTab: (tab: MessageTabKey) => void
   setRightTab: (tab: RightTabKey) => void
@@ -37,6 +216,9 @@ interface WorkbenchState {
   restoreLastChat: () => void
   openTaskModal: (taskKey: TaskKey) => void
   closeTaskModal: () => void
+  studentFeedbackOpen: boolean
+  openStudentFeedbackModal: () => void
+  closeStudentFeedbackModal: () => void
   addCalendarEvent: (event: CalEvent) => void
   updateCalendarEvent: (event: CalEvent) => void
   deleteCalendarEvent: (id: string) => void
@@ -45,6 +227,8 @@ interface WorkbenchState {
   linkUploadItem: TaskListItem | null
   openLinkUpload: (item: TaskListItem) => void
   closeLinkUpload: () => void
+  uploadReplayMaterial: (eventId: string, category: string, link: string) => Promise<void>
+  uploadHandoutMaterial: (eventId: string, file: File) => Promise<void>
   handoutUploadItem: TaskListItem | null
   openHandoutUpload: (item: TaskListItem) => void
   closeHandoutUpload: () => void
@@ -58,15 +242,20 @@ interface WorkbenchState {
   openTeacherProfile: (name: string) => void
   clearTargetTeacher: () => void
   groupMembersMap: Record<string, GroupMember[]>
-  addGroupMember: (contactId: string, member: GroupMember) => void
-  removeGroupMember: (contactId: string, memberName: string) => void
+  addGroupMember: (contactId: string, member: GroupMember) => Promise<void>
+  removeGroupMember: (contactId: string, member: GroupMember) => Promise<void>
   manageMembersContactId: string | null
   openManageMembers: (contactId: string) => void
   closeManageMembers: () => void
+  loadGroupMembers: (contactId: string) => Promise<void>
   assignStudentItem: TaskListItem | null
   openAssignStudent: (item: TaskListItem) => void
   closeAssignStudent: () => void
+  assignStudentTask: (taskId: string, payload: Record<string, unknown>) => Promise<void>
+  completeAssignTask: (taskId: string) => Promise<void>
   studentInfoMap: Record<string, StudentInfoItem[]>
+  studentDetailMetaMap: Record<string, StudentDetailMeta>
+  studentAnswersMap: Record<string, QuestionAnswer[]>
   addStudentInfo: (studentId: string, authorName: string, authorRole: string, content: string) => Promise<void>
   deleteStudentInfo: (studentId: string, infoId: string) => Promise<void>
   loadStudentInfo: (studentId: string) => Promise<void>
@@ -88,8 +277,9 @@ interface WorkbenchState {
   setStudentDayNote: (studentId: string, day: number, note: string) => void
   // ── 投诉 ──
   complaintsMap: Record<string, ComplaintRecord[]>   // studentId → records
-  addComplaint: (record: Omit<ComplaintRecord, 'id' | 'submittedAt' | 'status'>) => void
-  resolveComplaint: (studentId: string, complaintId: string, resolvedNote: string) => void
+  loadComplaints: () => Promise<void>
+  addComplaint: (record: Omit<ComplaintRecord, 'id' | 'submittedAt' | 'status'>) => Promise<void>
+  resolveComplaint: (studentId: string, complaintId: string, resolvedNote: string) => Promise<void>
   // ── 私聊 ──
   privateSessions: PrivateChatSession[]
   privateMsgMap: Record<string, ChatMessage[]>
@@ -105,30 +295,75 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   selectedContactId: null,
   lastContactId: null,
   openTaskKey: null,
-  calendarEvents: initialEvents,
+  studentFeedbackOpen: false,
+  calendarEvents: [],
   teacherName: getTeacherNameFromToken(),
-  taskCounts: { pendingClass: 0, pendingReply: 0, abnormalUser: 0, pendingReview: 0, pendingAssign: 0, pendingLink: 0, newStudent: 0, pendingHandout: 0 },
+  taskCounts: { pendingClass: 0, pendingReply: 0, abnormalUser: 0, pendingReview: 0, pendingLeave: 0, pendingAssign: 0, pendingLink: 0, newStudent: 0, pendingHandout: 0, pendingFeedback: 0 },
   loadTaskCounts: async () => {
-    const data = await api.get<{ pendingClass: number; pendingGrade: number; newStudents: number; abnormal: number }>('/api/teacher/tasks/count')
+    const data = await api.get<{
+      pendingClass?: number
+      pendingGrade?: number
+      pendingLeave?: number
+      newStudents?: number
+      abnormal?: number
+      pendingReply?: number
+      pendingAssign?: number
+      pendingLink?: number
+      pendingHandout?: number
+      pendingFeedback?: number
+    }>('/api/teacher/tasks/count')
     if (data) {
       set({
         taskCounts: {
           pendingClass:   data.pendingClass  ?? 0,
-          pendingReply:   0,
+          pendingReply:   data.pendingReply  ?? 0,
           abnormalUser:   data.abnormal      ?? 0,
           pendingReview:  data.pendingGrade  ?? 0,
+          pendingLeave:   data.pendingLeave  ?? 0,
           newStudent:     data.newStudents   ?? 0,
-          pendingAssign:  0,
-          pendingLink:    data.pendingClass  ?? 0,
-          pendingHandout: 0,
+          pendingAssign:  data.pendingAssign ?? 0,
+          pendingLink:    data.pendingLink   ?? 0,
+          pendingHandout: data.pendingHandout ?? 0,
+          pendingFeedback: data.pendingFeedback ?? 0,
         },
       })
     }
+  },
+  taskItemsMap: {
+    pendingClass: [],
+    pendingReply: [],
+    abnormalUser: [],
+    pendingReview: [],
+    pendingLeave: [],
+    pendingAssign: [],
+    pendingLink: [],
+    newStudent: [],
+    pendingHandout: [],
+    pendingFeedback: [],
+  },
+  loadTaskItems: async () => {
+    const data = await api.get<Partial<Record<TaskKey, TaskListItem[]>>>('/api/teacher/tasks/items')
+    if (!data) return
+    set({
+      taskItemsMap: {
+        pendingClass: Array.isArray(data.pendingClass) ? data.pendingClass : [],
+        pendingReply: Array.isArray(data.pendingReply) ? data.pendingReply : [],
+        abnormalUser: Array.isArray(data.abnormalUser) ? data.abnormalUser : [],
+        pendingReview: Array.isArray(data.pendingReview) ? data.pendingReview : [],
+        pendingLeave: Array.isArray(data.pendingLeave) ? data.pendingLeave : [],
+        pendingAssign: Array.isArray(data.pendingAssign) ? data.pendingAssign : [],
+        pendingLink: Array.isArray(data.pendingLink) ? data.pendingLink : [],
+        newStudent: Array.isArray(data.newStudent) ? data.newStudent : [],
+        pendingHandout: Array.isArray(data.pendingHandout) ? data.pendingHandout : [],
+        pendingFeedback: Array.isArray(data.pendingFeedback) ? data.pendingFeedback : [],
+      },
+    })
   },
   students: [],
   loadStudents: async () => {
     const data = await api.get<Array<Record<string, unknown>>>('/api/teacher/students')
     if (Array.isArray(data)) {
+      const contactMap = contactIdByStudentId(get().chatContacts)
       const students: StudentItem[] = data.map((r, i) => ({
         id:          String(r.id),
         name:        String(r.name),
@@ -138,15 +373,315 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         lastSession: r.last_session_date ? String(r.last_session_date).slice(0, 10) : '暂无',
         avatar:      String(r.name).slice(0, 1),
         color:       STUDENT_COLORS[i % STUDENT_COLORS.length],
+        contactId:   contactMap[String(r.id)],
       }))
       set({ students })
+    }
+  },
+  abnormalStudents: [],
+  loadAbnormalStudents: async () => {
+    const data = await api.get<Array<Record<string, unknown>>>('/api/teacher/students/abnormal')
+    if (!Array.isArray(data)) return
+
+    const abnormalStudents: AbnormalStudent[] = data.map((item) => ({
+      id: String(item.id),
+      name: String(item.name ?? ''),
+      status: ((item.status as AbnormalStudent['status']) ?? 'warning'),
+      reason: String(item.reason ?? ''),
+      severity: ((item.severity as AbnormalStudent['severity']) ?? 'medium'),
+      updatedAt: String(item.updated_at ?? ''),
+    }))
+
+    set({ abnormalStudents })
+  },
+  chatContacts: [],
+  loadChatContacts: async () => {
+    const contacts = await fetchChatRooms()
+    set((s) => ({
+      chatContacts: contacts,
+      taskCounts: {
+        ...s.taskCounts,
+        pendingReply: contacts.filter((item) =>
+          item.contactType === 'student' && (item.lastSenderType === 'student' || (item.unreadCount ?? 0) > 0),
+        ).length,
+      },
+      students: s.students.map((student) => ({
+        ...student,
+        contactId: contacts.find((item) => item.studentId === student.id)?.id ?? student.contactId,
+      })),
+      selectedContactId: s.selectedContactId && contacts.some((item) => item.id === s.selectedContactId) ? s.selectedContactId : null,
+      lastContactId: s.lastContactId && contacts.some((item) => item.id === s.lastContactId) ? s.lastContactId : null,
+    }))
+  },
+  chatMessagesMap: {},
+  loadChatMessages: async (contactId, before) => {
+    const messages = await fetchChatMessages(contactId, before)
+    set((s) => ({
+      chatMessagesMap: {
+        ...s.chatMessagesMap,
+        [contactId]: before
+          ? mergeMessages(s.chatMessagesMap[contactId] ?? [], messages, true)
+          : mergeMessages(
+              messages,
+              (s.chatMessagesMap[contactId] ?? []).filter((item) => item.pending),
+              false,
+            ),
+      },
+    }))
+    return messages.length
+  },
+  sendChatMessage: async (contactId, text, replyToId) => {
+    if (
+      activeChatRoomId === contactId
+      && activeChatSocket
+      && activeChatSocket.readyState === WebSocket.OPEN
+    ) {
+      const currentMessages = get().chatMessagesMap[contactId] ?? []
+      const replyPreview = buildReplyPreview(currentMessages, replyToId)
+      const now = new Date()
+      const clientId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+      const optimisticMessage: ChatMessage = {
+        id: clientId,
+        clientId,
+        contactId,
+        sender: '带教老师',
+        senderName: get().teacherName || '老师',
+        text,
+        time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+        date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+        pending: true,
+        msgType: 'text',
+        replyTo: replyPreview,
+      }
+
+      set((s) => ({
+        chatMessagesMap: {
+          ...s.chatMessagesMap,
+          [contactId]: mergeMessages(s.chatMessagesMap[contactId] ?? [], [optimisticMessage], false),
+        },
+        chatContacts: updateChatContactPreview(s.chatContacts, contactId, optimisticMessage, 'teacher', true),
+      }))
+
+      try {
+        activeChatSocket.send(JSON.stringify({
+          type: 'chat_message',
+          roomId: contactId,
+          clientId,
+          content: text,
+          messageType: 'text',
+          replyToId: replyToId ?? null,
+        }))
+
+        pendingAckTimers.set(clientId, setTimeout(() => {
+          pendingAckTimers.delete(clientId)
+          void (async () => {
+            const current = findPendingMessage(get().chatMessagesMap[contactId] ?? [], clientId)
+            if (!current?.pending) {
+              return
+            }
+
+            const fallbackMessage = await postChatMessage(contactId, text, replyToId)
+            if (!fallbackMessage) {
+              return
+            }
+
+            const latestReplyTarget = findReplyTarget(get().chatMessagesMap[contactId] ?? [], replyToId)
+            const nextMessage = latestReplyTarget
+              ? {
+                  ...fallbackMessage,
+                  clientId,
+                  pending: false,
+                  replyTo: {
+                    id: latestReplyTarget.id,
+                    senderName: latestReplyTarget.senderName,
+                    text: latestReplyTarget.text,
+                  },
+                }
+              : {
+                  ...fallbackMessage,
+                  clientId,
+                  pending: false,
+                }
+
+            set((s) => ({
+              chatMessagesMap: {
+                ...s.chatMessagesMap,
+                [contactId]: mergeMessages(s.chatMessagesMap[contactId] ?? [], [nextMessage], false),
+              },
+              chatContacts: updateChatContactPreview(s.chatContacts, contactId, nextMessage, 'teacher', true),
+            }))
+          })().catch(() => {
+            set((s) => ({
+              chatMessagesMap: {
+                ...s.chatMessagesMap,
+                [contactId]: (s.chatMessagesMap[contactId] ?? []).map((item) =>
+                  item.clientId === clientId || item.id === clientId
+                    ? { ...item, pending: false }
+                    : item,
+                ),
+              },
+            }))
+          })
+        }, MESSAGE_ACK_TIMEOUT))
+        return optimisticMessage
+      } catch {
+        clearPendingAckTimer(clientId)
+        set((s) => ({
+          chatMessagesMap: {
+            ...s.chatMessagesMap,
+            [contactId]: (s.chatMessagesMap[contactId] ?? []).filter((item) => item.id !== clientId),
+          },
+        }))
+      }
+    }
+
+    const message = await postChatMessage(contactId, text, replyToId)
+    if (!message) return null
+
+    const replyTarget = findReplyTarget(get().chatMessagesMap[contactId] ?? [], replyToId)
+
+    const nextMessage = replyTarget
+      ? { ...message, replyTo: { id: replyTarget.id, senderName: replyTarget.senderName, text: replyTarget.text } }
+      : message
+
+    set((s) => ({
+      chatMessagesMap: {
+        ...s.chatMessagesMap,
+        [contactId]: mergeMessages(s.chatMessagesMap[contactId] ?? [], [nextMessage], false),
+      },
+      chatContacts: updateChatContactPreview(s.chatContacts, contactId, nextMessage, 'teacher', true),
+    }))
+
+    return nextMessage
+  },
+  connectChatRoom: (contactId) => {
+    const socketIsReusable = (
+      activeChatRoomId === contactId
+      && activeChatSocket
+      && (activeChatSocket.readyState === WebSocket.OPEN || activeChatSocket.readyState === WebSocket.CONNECTING)
+    )
+    if (socketIsReusable) return
+
+    shouldReconnect = false
+    clearReconnectTimer()
+
+    if (activeChatSocket) {
+      activeChatSocket.close()
+      activeChatSocket = null
+    }
+
+    activeChatRoomId = contactId
+    shouldReconnect = true
+
+    const socket = new WebSocket(buildChatSocketUrl(contactId))
+    activeChatSocket = socket
+
+    socket.onopen = () => {
+      reconnectAttempts = 0
+    }
+
+    socket.onmessage = (event) => {
+      let payload: Record<string, unknown>
+
+      try {
+        payload = JSON.parse(String(event.data)) as Record<string, unknown>
+      } catch {
+        return
+      }
+
+      if (payload.type === 'connected' || payload.type === 'pong') {
+        reconnectAttempts = 0
+        return
+      }
+
+      if (payload.type !== 'ack' && payload.type !== 'chat_message') {
+        return
+      }
+
+      const rawMessage = payload.message
+      if (!rawMessage || typeof rawMessage !== 'object') {
+        return
+      }
+
+      if (payload.type === 'ack' && typeof payload.clientId === 'string') {
+        clearPendingAckTimer(payload.clientId)
+      }
+
+      const currentMessages = get().chatMessagesMap[contactId] ?? []
+      const mapped = mapSocketChatMessage(
+        contactId,
+        rawMessage as Parameters<typeof mapSocketChatMessage>[1],
+        typeof payload.clientId === 'string' && payload.clientId ? payload.clientId : undefined,
+      )
+      const nextMessage: ChatMessage = {
+        ...mapped.message,
+        pending: false,
+        replyTo: buildReplyPreview(currentMessages, mapped.replyToId),
+      }
+      const senderType = nextMessage.sender === '带教老师' ? 'teacher' : 'student'
+
+      set((s) => ({
+        chatMessagesMap: {
+          ...s.chatMessagesMap,
+          [contactId]: mergeMessages(s.chatMessagesMap[contactId] ?? [], [nextMessage], false),
+        },
+        chatContacts: updateChatContactPreview(
+          s.chatContacts,
+          contactId,
+          nextMessage,
+          senderType,
+          s.selectedContactId === contactId,
+        ),
+      }))
+    }
+
+    socket.onclose = () => {
+      if (activeChatSocket === socket) {
+        activeChatSocket = null
+      }
+
+      if (!shouldReconnect || activeChatRoomId !== contactId) {
+        return
+      }
+
+      clearReconnectTimer()
+      const delay = Math.min(5000, 500 * (2 ** reconnectAttempts))
+      reconnectAttempts += 1
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null
+        if (shouldReconnect && activeChatRoomId === contactId) {
+          get().connectChatRoom(contactId)
+        }
+      }, delay)
+    }
+  },
+  disconnectChatRoom: () => {
+    shouldReconnect = false
+    activeChatRoomId = null
+    reconnectAttempts = 0
+    clearReconnectTimer()
+    pendingAckTimers.forEach((timer) => clearTimeout(timer))
+    pendingAckTimers.clear()
+
+    if (activeChatSocket) {
+      const socket = activeChatSocket
+      activeChatSocket = null
+      socket.close()
     }
   },
 
   setLeftMessageTab: (tab) => set({ leftMessageTab: tab }),
   setRightTab: (tab) => set({ rightTab: tab }),
   selectContact: (contactId) =>
-    set({ selectedContactId: contactId, lastContactId: contactId, rightTab: 'chat', selectedPmId: null }),
+    set((s) => ({
+      selectedContactId: contactId,
+      lastContactId: contactId,
+      rightTab: 'chat',
+      selectedPmId: null,
+      chatContacts: s.chatContacts.map((item) =>
+        item.id === contactId ? { ...item, unreadCount: 0 } : item,
+      ),
+    })),
   clearSelectedContact: () => set({ selectedContactId: null, rightTab: 'chat' }),
   restoreLastChat: () => {
     const { lastContactId } = get()
@@ -156,8 +691,14 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       set({ rightTab: 'chat' })
     }
   },
-  openTaskModal: (taskKey) => set({ openTaskKey: taskKey }),
+  openTaskModal: (taskKey) => set(
+    taskKey === 'pendingFeedback'
+      ? { openTaskKey: null, studentFeedbackOpen: true }
+      : { openTaskKey: taskKey, studentFeedbackOpen: false },
+  ),
   closeTaskModal: () => set({ openTaskKey: null }),
+  openStudentFeedbackModal: () => set({ studentFeedbackOpen: true, openTaskKey: null }),
+  closeStudentFeedbackModal: () => set({ studentFeedbackOpen: false }),
   addCalendarEvent: async (event) => {
     set((s) => ({ calendarEvents: [...s.calendarEvents, event] }))
     try {
@@ -190,25 +731,39 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       calendarEvents: s.calendarEvents.map((e) => e.id === eventId ? { ...e, link } : e),
     }))
     await api.put(`/api/teacher/calendar/${eventId}/link`, { link })
+    await get().loadTaskCounts()
+    await get().loadTaskItems()
   },
   loadCalendarEvents: async () => {
     const data = await api.get<Array<Record<string, unknown>>>('/api/teacher/calendar')
-    if (Array.isArray(data) && data.length > 0) {
-      const events: CalEvent[] = data.map((r) => ({
-        id: String(r.id),
-        date: r.date as string,
-        startTime: r.start_time as string,
-        endTime: r.end_time as string,
-        title: r.title as string,
-        type: r.type as CalEvent['type'],
-        link: (r.link as string) ?? undefined,
-      }))
-      set({ calendarEvents: events })
-    }
+    if (!Array.isArray(data)) return
+    const events: CalEvent[] = data.map((r) => ({
+      id: String(r.id),
+      date: r.date as string,
+      startTime: r.start_time as string,
+      endTime: r.end_time as string,
+      title: r.title as string,
+      type: r.type as CalEvent['type'],
+      link: (r.link as string) ?? undefined,
+    }))
+    set({ calendarEvents: events })
   },
   linkUploadItem: null,
   openLinkUpload: (item) => set({ linkUploadItem: item }),
   closeLinkUpload: () => set({ linkUploadItem: null }),
+  uploadReplayMaterial: async (eventId, category, link) => {
+    await api.post('/api/teacher/materials/replay', { eventId, category, link })
+    await get().loadTaskCounts()
+    await get().loadTaskItems()
+  },
+  uploadHandoutMaterial: async (eventId, file) => {
+    const form = new FormData()
+    form.append('eventId', eventId)
+    form.append('file', file)
+    await api.postForm('/api/teacher/materials/handout', form)
+    await get().loadTaskCounts()
+    await get().loadTaskItems()
+  },
   handoutUploadItem: null,
   openHandoutUpload: (item) => set({ handoutUploadItem: item }),
   closeHandoutUpload: () => set({ handoutUploadItem: null }),
@@ -221,20 +776,58 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   targetTeacherName: null,
   openTeacherProfile: (name) => set({ targetTeacherName: name, rightTab: 'students' }),
   clearTargetTeacher: () => set({ targetTeacherName: null }),
-  groupMembersMap: Object.fromEntries(Object.entries(initialGroupMembers).map(([k, v]) => [k, [...v]])),
-  addGroupMember: (contactId, member) => set((s) => ({
-    groupMembersMap: { ...s.groupMembersMap, [contactId]: [...(s.groupMembersMap[contactId] ?? []), member] },
-  })),
-  removeGroupMember: (contactId, memberName) => set((s) => ({
-    groupMembersMap: { ...s.groupMembersMap, [contactId]: (s.groupMembersMap[contactId] ?? []).filter((m) => m.name !== memberName) },
-  })),
+  groupMembersMap: {},
+  addGroupMember: async (contactId, member) => {
+    const savedMember = await addChatMember(contactId, member)
+    set((s) => ({
+      groupMembersMap: {
+        ...s.groupMembersMap,
+        [contactId]: [...(s.groupMembersMap[contactId] ?? []), savedMember],
+      },
+    }))
+  },
+  removeGroupMember: async (contactId, member) => {
+    if (!member.teacherId) return
+    await removeChatMember(contactId, member.teacherId)
+    set((s) => ({
+      groupMembersMap: {
+        ...s.groupMembersMap,
+        [contactId]: (s.groupMembersMap[contactId] ?? []).filter((item) =>
+          member.teacherId
+            ? item.teacherId !== member.teacherId
+            : !(item.name === member.name && item.role === member.role),
+        ),
+      },
+    }))
+  },
   manageMembersContactId: null,
   openManageMembers: (contactId) => set({ manageMembersContactId: contactId }),
   closeManageMembers: () => set({ manageMembersContactId: null }),
+  loadGroupMembers: async (contactId) => {
+    const members = await fetchChatMembers(contactId)
+    set((s) => ({
+      groupMembersMap: {
+        ...s.groupMembersMap,
+        [contactId]: members,
+      },
+    }))
+  },
   assignStudentItem: null,
   openAssignStudent: (item) => set({ assignStudentItem: item }),
   closeAssignStudent: () => set({ assignStudentItem: null }),
+  assignStudentTask: async (taskId, payload) => {
+    await api.post(`/api/teacher/practice-assignment-tasks/${taskId}/assign`, payload)
+    await get().loadTaskCounts()
+    await get().loadTaskItems()
+  },
+  completeAssignTask: async (taskId) => {
+    await api.post(`/api/teacher/practice-assignment-tasks/${taskId}/complete`, {})
+    await get().loadTaskCounts()
+    await get().loadTaskItems()
+  },
   studentInfoMap: {},
+  studentDetailMetaMap: {},
+  studentAnswersMap: {},
   addStudentInfo: async (studentId, authorName, authorRole, content) => {
     const item: StudentInfoItem = {
       id: `si_${Date.now()}`,
@@ -262,9 +855,20 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     await api.delete(`/api/teacher/notes/${infoId}`)
   },
   loadStudentInfo: async (studentId) => {
-    const data = await api.get<{ notes: Array<Record<string, unknown>> }>(`/api/teacher/students/${studentId}/info`)
-    if (data?.notes) {
-      const items: StudentInfoItem[] = data.notes.map((r) => ({
+    const data = await api.get<{
+      student?: Record<string, unknown> | null
+      notes?: Array<Record<string, unknown>>
+      flagged?: boolean
+      flagReason?: string | null
+      flagSeverity?: string | null
+      courses?: Array<Record<string, unknown>>
+      sessionCount?: number
+      totalHours?: number
+      teamTeachers?: Array<Record<string, unknown>>
+      submissions?: Array<Record<string, unknown>>
+    }>(`/api/teacher/students/${studentId}/info`)
+    if (data) {
+      const items: StudentInfoItem[] = (data.notes ?? []).map((r) => ({
         id: String(r.id),
         studentId: String(r.student_id),
         authorName: r.author as string,
@@ -272,7 +876,55 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         content: r.content as string,
         createdAt: r.created_at as string,
       }))
-      set((s) => ({ studentInfoMap: { ...s.studentInfoMap, [studentId]: items } }))
+      const student = data.student ?? null
+      const answers: QuestionAnswer[] = (data.submissions ?? []).map((submission) => ({
+        id: String(submission.id),
+        questionTitle: buildSubmissionTitle(submission.review_type, submission.checkpoint, submission.file_name),
+        questionType: mapSubmissionReviewType(typeof submission.review_type === 'string' ? submission.review_type : null),
+        studentAnswer: submission.file_name ? `已提交文件：${String(submission.file_name)}` : '已提交作答',
+        submittedAt: String(submission.created_at ?? new Date().toISOString()),
+        status: submission.graded ? 'reviewed' : 'pending',
+        score: submission.score === null || submission.score === undefined ? undefined : Number(submission.score),
+        teacherComment: submission.feedback ? String(submission.feedback) : undefined,
+        reviewedAt: submission.graded_at ? String(submission.graded_at) : undefined,
+      }))
+      const detailMeta: StudentDetailMeta = {
+        joinDate: student?.created_at ? String(student.created_at).slice(0, 10) : null,
+        sessionCount: Number(data.sessionCount ?? 0),
+        totalHours: Number(data.totalHours ?? 0),
+        courses: (data.courses ?? []).map((course) => ({
+          id: String(course.id),
+          name: String(course.name ?? ''),
+          subject: String(course.subject ?? ''),
+          progress: Number(course.progress ?? 0),
+          status: ((course.status as 'in_progress' | 'completed' | 'failed') ?? 'in_progress'),
+        })),
+        teamTeachers: (data.teamTeachers ?? []).map((item) => ({
+          id: String(item.id),
+          name: String(item.name ?? ''),
+          role: mapTeamRole(typeof item.role === 'string' ? item.role : null),
+          title: item.title ? String(item.title) : undefined,
+          status: item.status ? String(item.status) : undefined,
+        })),
+        profile: {
+          gender: student?.gender ? String(student.gender) : null,
+          grade: student?.profile_grade ? String(student.profile_grade) : null,
+          hometown: student?.hometown ? String(student.hometown) : null,
+          examStatus: student?.exam_status ? String(student.exam_status) : null,
+          examDate: student?.exam_date ? String(student.exam_date).slice(0, 10) : null,
+          education: student?.education ? String(student.education) : null,
+          major: student?.major ? String(student.major) : null,
+          avatarUrl: student?.avatar_url ? String(student.avatar_url) : null,
+        },
+        flagReason: data.flagReason ?? null,
+        flagSeverity: data.flagSeverity ?? null,
+      }
+      set((s) => ({
+        studentInfoMap: { ...s.studentInfoMap, [studentId]: items },
+        studentDetailMetaMap: { ...s.studentDetailMetaMap, [studentId]: detailMeta },
+        studentAnswersMap: { ...s.studentAnswersMap, [studentId]: answers },
+        flaggedMap: { ...s.flaggedMap, [studentId]: data.flagged ?? false },
+      }))
     }
   },
   flaggedMap: {},
@@ -324,7 +976,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     }
   },
   // ── 学生刷题分配 ──
-  studentPracticeAssignments: { ...defaultStudentPracticeAssignments },
+  studentPracticeAssignments: {},
   setStudentPracticeAssignment: (studentId, checkpointId, questionIds) =>
     set((s) => ({
       studentPracticeAssignments: {
@@ -346,31 +998,39 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     })),
   // ── 投诉 ──
   complaintsMap: {},
-  addComplaint: (record) => {
-    const complaint: ComplaintRecord = {
-      ...record,
-      id: `cp_${Date.now()}`,
-      submittedAt: new Date().toISOString(),
-      status: 'pending',
-    }
+  loadComplaints: async () => {
+    const data = await api.get<Array<Record<string, unknown>>>('/api/teacher/complaints')
+    if (!Array.isArray(data)) return
+
+    const complaintsMap = data
+      .map(mapComplaintRecord)
+      .reduce<Record<string, ComplaintRecord[]>>((acc, complaint) => {
+        acc[complaint.studentId] = [...(acc[complaint.studentId] ?? []), complaint]
+        return acc
+      }, {})
+
+    set({ complaintsMap })
+  },
+  addComplaint: async (record) => {
+    const data = await api.post<Record<string, unknown>>('/api/teacher/complaints', record)
+    const complaint = mapComplaintRecord(data)
     set((s) => ({
       complaintsMap: {
         ...s.complaintsMap,
-        [record.studentId]: [...(s.complaintsMap[record.studentId] ?? []), complaint],
+        [record.studentId]: [complaint, ...(s.complaintsMap[record.studentId] ?? [])],
       },
     }))
   },
-  resolveComplaint: (studentId, complaintId, resolvedNote) =>
+  resolveComplaint: async (studentId, complaintId, resolvedNote) => {
+    const data = await api.put<Record<string, unknown>>(`/api/teacher/complaints/${complaintId}/resolve`, { resolvedNote })
+    const complaint = mapComplaintRecord(data)
     set((s) => ({
       complaintsMap: {
         ...s.complaintsMap,
-        [studentId]: (s.complaintsMap[studentId] ?? []).map((c) =>
-          c.id === complaintId
-            ? { ...c, status: 'resolved', resolvedAt: new Date().toISOString(), resolvedNote }
-            : c,
-        ),
+        [studentId]: (s.complaintsMap[studentId] ?? []).map((item) => item.id === complaintId ? complaint : item),
       },
-    })),
+    }))
+  },
   // ── 私聊 ──
   privateSessions: [],
   privateMsgMap: {},

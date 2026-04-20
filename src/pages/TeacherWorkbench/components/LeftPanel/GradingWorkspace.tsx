@@ -1,9 +1,10 @@
 import { createPortal } from 'react-dom'
-import { useState, useRef, useEffect } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import type { ReviewItem } from '../../mock/workbenchMock'
-import { fetchSubmissionPdfUrl } from '../../api/submissions'
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import type { ReviewItem } from '../../api/submissions'
+import { fetchSubmissionPdfBlob, uploadReviewedSubmissionPdf } from '../../api/submissions'
 import { api } from '../../../../lib/api'
 
 // ── pdfjs worker ──────────────────────────────────────────────────────────────
@@ -22,6 +23,16 @@ type DrawingStroke   = BrushStroke | UnderlineStroke
 
 interface TextAnn {
   id: string; x: number; y: number; text: string; color: string; opaque: boolean
+}
+
+interface PageAnnotationState {
+  strokes: DrawingStroke[]
+  textAnns: TextAnn[]
+}
+
+interface StudentPdfPanelHandle {
+  exportReviewedPdfFile: () => Promise<File | null>
+  hasEdits: () => boolean
 }
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -60,6 +71,116 @@ const GRADE_CLS: Record<string, string> = {
 }
 
 // ── canvas utilities ──────────────────────────────────────────────────────────
+function hexToRgb(color: string) {
+  const safeColor = String(color || '').replace('#', '')
+  if (safeColor.length !== 6) return rgb(0, 0, 0)
+
+  const r = parseInt(safeColor.slice(0, 2), 16) / 255
+  const g = parseInt(safeColor.slice(2, 4), 16) / 255
+  const b = parseInt(safeColor.slice(4, 6), 16) / 255
+  return rgb(r, g, b)
+}
+
+function hasAnyAnnotations(pages: Record<number, PageAnnotationState>) {
+  return Object.values(pages).some((page) => page.strokes.length > 0 || page.textAnns.length > 0)
+}
+
+async function exportAnnotatedPdfFile({
+  originalBytes,
+  pages,
+  renderSizes,
+  fallbackName,
+}: {
+  originalBytes: ArrayBuffer | null
+  pages: Record<number, PageAnnotationState>
+  renderSizes: Record<number, { width: number; height: number }>
+  fallbackName: string
+}) {
+  if (!originalBytes || !hasAnyAnnotations(pages)) {
+    return null
+  }
+
+  const pdfDoc = await PDFDocument.load(originalBytes.slice(0))
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
+
+  for (const [pageKey, pageState] of Object.entries(pages)) {
+    if (!pageState.strokes.length && !pageState.textAnns.length) continue
+
+    const page = pdfDoc.getPage(Number(pageKey) - 1)
+    const pdfWidth = page.getWidth()
+    const pdfHeight = page.getHeight()
+    const renderSize = renderSizes[Number(pageKey)] ?? { width: pdfWidth, height: pdfHeight }
+    const scaleX = pdfWidth / Math.max(renderSize.width, 1)
+    const scaleY = pdfHeight / Math.max(renderSize.height, 1)
+    const lineScale = Math.max(scaleX, scaleY)
+
+    for (const stroke of pageState.strokes) {
+      if (stroke.type === 'brush') {
+        if (stroke.points.length === 1) {
+          const [x, y] = stroke.points[0]
+          page.drawCircle({
+            x: x * scaleX,
+            y: pdfHeight - y * scaleY,
+            size: Math.max((stroke.width * lineScale) / 2, 0.8),
+            color: hexToRgb(stroke.color),
+          })
+          continue
+        }
+
+        for (let i = 1; i < stroke.points.length; i += 1) {
+          const [x1, y1] = stroke.points[i - 1]
+          const [x2, y2] = stroke.points[i]
+          page.drawLine({
+            start: { x: x1 * scaleX, y: pdfHeight - y1 * scaleY },
+            end: { x: x2 * scaleX, y: pdfHeight - y2 * scaleY },
+            thickness: Math.max(stroke.width * lineScale, 0.8),
+            color: hexToRgb(stroke.color),
+          })
+        }
+      } else {
+        page.drawLine({
+          start: { x: stroke.x1 * scaleX, y: pdfHeight - stroke.y1 * scaleY },
+          end: { x: stroke.x2 * scaleX, y: pdfHeight - stroke.y1 * scaleY },
+          thickness: Math.max(stroke.width * lineScale, 0.8),
+          color: hexToRgb(stroke.color),
+        })
+      }
+    }
+
+    for (const ann of pageState.textAnns) {
+      const fontSize = Math.max(12 * lineScale, 10)
+      const textWidth = font.widthOfTextAtSize(ann.text, fontSize)
+      const textHeight = font.heightAtSize(fontSize)
+      const x = ann.x * scaleX - textWidth / 2
+      const y = pdfHeight - ann.y * scaleY - textHeight / 2
+
+      if (ann.opaque) {
+        page.drawRectangle({
+          x: x - 6 * scaleX,
+          y: y - 3 * scaleY,
+          width: textWidth + 12 * scaleX,
+          height: textHeight + 6 * scaleY,
+          color: rgb(1, 1, 1),
+        })
+      }
+
+      page.drawText(ann.text, {
+        x,
+        y,
+        size: fontSize,
+        font,
+        color: hexToRgb(ann.color),
+      })
+    }
+  }
+
+  const rawName = fallbackName.trim() || `reviewed-${Date.now()}.pdf`
+  const fileName = rawName.toLowerCase().endsWith('.pdf') ? rawName : `${rawName}.pdf`
+  const bytes = await pdfDoc.save()
+  const blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' })
+  return new File([blob], fileName, { type: 'application/pdf' })
+}
+
 function paintStroke(ctx: CanvasRenderingContext2D, s: DrawingStroke, alpha = 1) {
   ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = s.color
   ctx.lineWidth = s.width; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
@@ -312,9 +433,10 @@ function AnswerPanel() {
       const buf = await file.arrayBuffer()
       const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise
       setPdfDoc(doc); setTotalPages(doc.numPages); setPdfPage(1)
-    } catch { setError('PDF 加载失败') }
+    } catch { setError('PDF ??????') }
     finally { setLoading(false) }
   }
+
 
   const pageNav = pdfDoc ? (
     <div className="flex items-center gap-0.5 text-xs text-[var(--color-text-secondary)]">
@@ -368,7 +490,7 @@ function AnswerPanel() {
 }
 
 // ── StudentPdfPanel (左下) ────────────────────────────────────────────────────
-function StudentPdfPanel({ item }: { item: ReviewItem }) {
+const StudentPdfPanel = forwardRef<StudentPdfPanelHandle, { item: ReviewItem }>(function StudentPdfPanel({ item }, ref) {
   const [pdfDoc, setPdfDoc]         = useState<PDFDocumentProxy | null>(null)
   const [pdfPage, setPdfPage]       = useState(1)
   const [totalPages, setTotalPages] = useState(0)
@@ -386,15 +508,22 @@ function StudentPdfPanel({ item }: { item: ReviewItem }) {
   const textInputRef = useRef<HTMLInputElement>(null)
   const isDrawing    = useRef(false)
   const blobUrlRef   = useRef<string>('')
+  const originalPdfBytesRef = useRef<ArrayBuffer | null>(null)
+  const annotationMapRef = useRef<Record<number, PageAnnotationState>>({})
+  const renderSizeMapRef = useRef<Record<number, { width: number; height: number }>>({})
 
   useEffect(() => {
     let cancelled = false
     setPdfLoading(true); setPdfError('')
-    fetchSubmissionPdfUrl(item.id)
-      .then(async (url) => {
+    fetchSubmissionPdfBlob(item.id)
+      .then(async (blob) => {
+        const url = URL.createObjectURL(blob)
         if (cancelled) { URL.revokeObjectURL(url); return }
         blobUrlRef.current = url
-        const doc = await pdfjsLib.getDocument(url).promise
+        originalPdfBytesRef.current = await blob.arrayBuffer()
+        annotationMapRef.current = {}
+        renderSizeMapRef.current = {}
+        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(originalPdfBytesRef.current.slice(0)) }).promise
         if (cancelled) return
         setPdfDoc(doc); setTotalPages(doc.numPages); setPdfPage(1)
       })
@@ -413,9 +542,11 @@ function StudentPdfPanel({ item }: { item: ReviewItem }) {
       const scale    = Math.min((container.offsetWidth - 32) / naturalW, 1.8)
       const viewport = page.getViewport({ scale })
       canvas.width = viewport.width; canvas.height = viewport.height
+      renderSizeMapRef.current[pdfPage] = { width: viewport.width, height: viewport.height }
       const ann = annotRef.current
       if (ann) { ann.width = viewport.width; ann.height = viewport.height }
-      setStrokes([]); setCurStroke(null); setTextAnns([])
+      const savedState = annotationMapRef.current[pdfPage] || { strokes: [], textAnns: [] }
+      setStrokes(savedState.strokes); setCurStroke(null); setTextAnns(savedState.textAnns)
       await page.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport }).promise
     }
     render().catch(console.error)
@@ -423,13 +554,36 @@ function StudentPdfPanel({ item }: { item: ReviewItem }) {
   }, [pdfDoc, pdfPage])
 
   useEffect(() => { const ann = annotRef.current; if (ann) repaint(ann, strokes, curStroke) }, [strokes, curStroke])
+  useEffect(() => {
+    annotationMapRef.current[pdfPage] = { strokes, textAnns }
+  }, [pdfPage, strokes, textAnns])
+
+  useImperativeHandle(ref, () => ({
+    hasEdits() {
+      return hasAnyAnnotations({
+        ...annotationMapRef.current,
+        [pdfPage]: { strokes, textAnns },
+      })
+    },
+    async exportReviewedPdfFile() {
+      return exportAnnotatedPdfFile({
+        originalBytes: originalPdfBytesRef.current,
+        pages: {
+          ...annotationMapRef.current,
+          [pdfPage]: { strokes, textAnns },
+        },
+        renderSizes: renderSizeMapRef.current,
+        fallbackName: `${item.name || 'student-review'}-${item.id}.pdf`,
+      })
+    },
+  }), [item.id, item.name, pdfPage, strokes, textAnns])
 
   function undo() {
     if (curStroke) { setCurStroke(null); return }
     if (strokes.length) { setStrokes((p) => p.slice(0, -1)); return }
     setTextAnns((p) => p.slice(0, -1))
   }
-  function changePage(p: number) { setPdfPage(p); setStrokes([]); setCurStroke(null); setTextAnns([]) }
+  function changePage(p: number) { setPdfPage(p); setCurStroke(null) }
 
   const pageNav = pdfDoc ? (
     <div className="flex items-center gap-0.5 text-xs text-[var(--color-text-secondary)]">
@@ -461,7 +615,7 @@ function StudentPdfPanel({ item }: { item: ReviewItem }) {
       </div>
     </PanelShell>
   )
-}
+})
 
 // ── ScorePanel (右上) ─────────────────────────────────────────────────────────
 const SCORE_SECTIONS = [
@@ -555,11 +709,12 @@ function ScorePanel({ scores, setScores, grade, setGrade }: {
 }
 
 // ── ReportPanel (右下) ────────────────────────────────────────────────────────
-function ReportPanel({ submissionId, totalScore, notes, setNotes }: {
+function ReportPanel({ submissionId, totalScore, notes, setNotes, studentPdfPanelRef }: {
   submissionId: string
   totalScore: number
   notes: string
   setNotes: (v: string) => void
+  studentPdfPanelRef: React.RefObject<StudentPdfPanelHandle | null>
 }) {
   const [pdfDoc, setPdfDoc]         = useState<PDFDocumentProxy | null>(null)
   const [pdfPage, setPdfPage]       = useState(1)
@@ -574,12 +729,19 @@ function ReportPanel({ submissionId, totalScore, notes, setNotes }: {
   const [textAnns, setTextAnns]   = useState<TextAnn[]>([])
   const [opaqueText, setOpaqueText] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [reportFile, setReportFile] = useState<File | null>(null)
+  const [reviewedFileName, setReviewedFileName] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null)
   const annotRef     = useRef<HTMLCanvasElement>(null)
   const wrapRef      = useRef<HTMLDivElement>(null)
   const textInputRef = useRef<HTMLInputElement>(null)
   const fileRef      = useRef<HTMLInputElement>(null)
   const isDrawing    = useRef(false)
+  const originalPdfBytesRef = useRef<ArrayBuffer | null>(null)
+  const annotationMapRef = useRef<Record<number, PageAnnotationState>>({})
+  const renderSizeMapRef = useRef<Record<number, { width: number; height: number }>>({})
 
   useEffect(() => {
     if (!pdfDoc) return; let cancelled = false
@@ -591,9 +753,11 @@ function ReportPanel({ submissionId, totalScore, notes, setNotes }: {
       const scale    = Math.min((container.offsetWidth - 32) / naturalW, 1.8)
       const viewport = page.getViewport({ scale })
       pdfCanvas.width = viewport.width; pdfCanvas.height = viewport.height
+      renderSizeMapRef.current[pdfPage] = { width: viewport.width, height: viewport.height }
       const ann = annotRef.current
       if (ann) { ann.width = viewport.width; ann.height = viewport.height }
-      setStrokes([]); setCurStroke(null); setTextAnns([])
+      const savedState = annotationMapRef.current[pdfPage] || { strokes: [], textAnns: [] }
+      setStrokes(savedState.strokes); setCurStroke(null); setTextAnns(savedState.textAnns)
       await page.render({ canvas: pdfCanvas, canvasContext: pdfCanvas.getContext('2d')!, viewport }).promise
     }
     renderPage().catch(console.error)
@@ -601,6 +765,9 @@ function ReportPanel({ submissionId, totalScore, notes, setNotes }: {
   }, [pdfDoc, pdfPage])
 
   useEffect(() => { const ann = annotRef.current; if (ann) repaint(ann, strokes, curStroke) }, [strokes, curStroke])
+  useEffect(() => {
+    annotationMapRef.current[pdfPage] = { strokes, textAnns }
+  }, [pdfPage, strokes, textAnns])
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; e.target.value = ''; if (!file) return
@@ -608,12 +775,20 @@ function ReportPanel({ submissionId, totalScore, notes, setNotes }: {
     try {
       const buf = await file.arrayBuffer()
       const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise
+      originalPdfBytesRef.current = buf
+      annotationMapRef.current = {}
+      renderSizeMapRef.current = {}
       setPdfDoc(doc); setTotalPages(doc.numPages); setPdfPage(1)
-    } catch { setError('PDF 加载失败') }
+      setReportFile(file)
+      setReviewedFileName(file.name)
+      setSubmitError('')
+      setSubmitted(false)
+    } catch { setError('PDF ??????') }
     finally { setLoading(false) }
   }
 
-  function changePdfPage(p: number) { setPdfPage(p); setStrokes([]); setCurStroke(null); setTextAnns([]) }
+
+  function changePdfPage(p: number) { setPdfPage(p); setCurStroke(null) }
   function undo() {
     if (curStroke) { setCurStroke(null); return }
     if (strokes.length) { setStrokes((p) => p.slice(0, -1)); return }
@@ -685,21 +860,62 @@ function ReportPanel({ submissionId, totalScore, notes, setNotes }: {
 
       {/* Report text + submit */}
       <div className="shrink-0 space-y-2 border-t border-[var(--color-border)] px-4 py-3">
+        {!!reviewedFileName && (
+          <div className="rounded-lg bg-[var(--color-bg-left)] px-3 py-2 text-xs text-[var(--color-text-secondary)]">
+            {`Feedback PDF: ${reviewedFileName}`}
+          </div>
+        )}
         <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
           placeholder="批改意见、问题总结与改进建议…"
           className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-left)] px-3 py-2 text-xs leading-relaxed text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-primary)]" />
+        {!!submitError && (
+          <div className="text-xs text-red-500">{submitError}</div>
+        )}
         {submitted ? (
           <div className="flex items-center justify-center gap-2 py-0.5 text-xs font-medium text-green-600">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
             报告已提交
           </div>
         ) : (
-          <button type="button" disabled={!notes.trim()} onClick={async () => {
-            await api.put(`/api/submissions/${submissionId}/grade`, { score: totalScore, feedback: notes })
-            setSubmitted(true)
+          <button type="button" disabled={submitting} onClick={async () => {
+            setSubmitting(true)
+            setSubmitError('')
+            try {
+              const currentPages = {
+                ...annotationMapRef.current,
+                [pdfPage]: { strokes, textAnns },
+              }
+              const hasReportEdits = hasAnyAnnotations(currentPages)
+              let fileToUpload: File | null = reportFile
+
+              if (reportFile && hasReportEdits) {
+                fileToUpload = await exportAnnotatedPdfFile({
+                  originalBytes: originalPdfBytesRef.current,
+                  pages: currentPages,
+                  renderSizes: renderSizeMapRef.current,
+                  fallbackName: reviewedFileName || reportFile.name,
+                })
+              } else if (!reportFile && studentPdfPanelRef.current?.hasEdits()) {
+                fileToUpload = await studentPdfPanelRef.current.exportReviewedPdfFile()
+              }
+
+              if (!fileToUpload) {
+                setSubmitError('Please annotate the student PDF in the page, or upload a reviewed PDF first.')
+                return
+              }
+
+              await uploadReviewedSubmissionPdf(submissionId, fileToUpload)
+              await api.put(`/api/submissions/${submissionId}/grade`, { score: totalScore, feedback: notes })
+              setReviewedFileName(fileToUpload.name)
+              setSubmitted(true)
+            } catch (error) {
+              setSubmitError(error instanceof Error ? error.message : '?????????')
+            } finally {
+              setSubmitting(false)
+            }
           }}
             className="w-full rounded-lg bg-[var(--color-primary)] py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40">
-            提交批改报告
+            {submitting ? 'Submitting...' : 'Submit Review Result'}
           </button>
         )}
       </div>
@@ -792,6 +1008,7 @@ export function GradingWorkspace({ item, onBack }: { item: ReviewItem; onBack: (
   const [grade, setGrade]   = useState('')
   const [notes, setNotes]   = useState('')
   const totalScore = SCORE_SECTIONS.reduce((s, r) => s + (parseFloat(scores[r.key] ?? '') || 0), 0)
+  const studentPdfPanelRef = useRef<StudentPdfPanelHandle | null>(null)
 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex flex-col bg-[#eaecef]">
@@ -837,7 +1054,7 @@ export function GradingWorkspace({ item, onBack }: { item: ReviewItem; onBack: (
           </div>
           <ResizeHandle direction="row" onDragStart={(sy) => startResize(sy, 'y', leftRatioRef, leftColRef, setLeftRatio)} />
           <div className="min-h-0 flex-1 overflow-hidden">
-            <StudentPdfPanel item={item} />
+            <StudentPdfPanel ref={studentPdfPanelRef} item={item} />
           </div>
         </div>
 
@@ -851,7 +1068,7 @@ export function GradingWorkspace({ item, onBack }: { item: ReviewItem; onBack: (
           </div>
           <ResizeHandle direction="row" onDragStart={(sy) => startResize(sy, 'y', rightRatioRef, rightColRef, setRightRatio)} />
           <div className="min-h-0 flex-1 overflow-hidden">
-            <ReportPanel submissionId={item.id} totalScore={totalScore} notes={notes} setNotes={setNotes} />
+            <ReportPanel submissionId={item.id} totalScore={totalScore} notes={notes} setNotes={setNotes} studentPdfPanelRef={studentPdfPanelRef} />
           </div>
         </div>
       </div>
