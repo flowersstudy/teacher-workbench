@@ -32,6 +32,7 @@ export function TeacherWorkbench({ onLogout }: { onLogout?: () => void }) {
       void loadCalendarEvents()
       void loadTaskCounts()
       void loadTaskItems()
+      void loadStudents()
       void loadAbnormalStudents()
       void loadChatContacts()
       void loadComplaints()

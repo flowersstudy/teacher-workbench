@@ -816,9 +816,15 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   openAssignStudent: (item) => set({ assignStudentItem: item }),
   closeAssignStudent: () => set({ assignStudentItem: null }),
   assignStudentTask: async (taskId, payload) => {
+    const currentItem = get().assignStudentItem
     await api.post(`/api/teacher/practice-assignment-tasks/${taskId}/assign`, payload)
     await get().loadTaskCounts()
     await get().loadTaskItems()
+    await get().loadStudents()
+    await get().loadChatContacts()
+    if (currentItem?.studentId) {
+      await get().loadStudentInfo(currentItem.studentId)
+    }
   },
   completeAssignTask: async (taskId) => {
     await api.post(`/api/teacher/practice-assignment-tasks/${taskId}/complete`, {})

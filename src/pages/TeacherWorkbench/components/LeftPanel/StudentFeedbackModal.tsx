@@ -74,6 +74,19 @@ function statusMeta(status: StudentFeedbackItem['status']) {
 }
 
 function normalizeCheckpoint(pointName = ''): CheckpointFilter {
+  const normalizedCheckpoints = [
+    '要点不全不准',
+    '提炼转述困难',
+    '分析结构不清',
+    '公文结构不清',
+    '对策推导困难',
+    '作文立意不准',
+    '作文论证不清',
+    '作文表达不畅',
+  ] as const
+  const normalizedFound = normalizedCheckpoints.find((checkpoint) => pointName.includes(checkpoint))
+  if (normalizedFound) return normalizedFound
+
   const found = CHECKPOINTS.find((checkpoint) => pointName.includes(checkpoint))
   return found ?? 'all'
 }
@@ -112,6 +125,8 @@ export function StudentFeedbackModal() {
 
   useEffect(() => {
     if (!isOpen) return
+    setActiveTab('recorded_lesson')
+    setCheckpointFilter('all')
     void loadFeedbacks()
   }, [isOpen])
 

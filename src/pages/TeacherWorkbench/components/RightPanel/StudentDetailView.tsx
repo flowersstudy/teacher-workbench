@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
-import { fetchStudentReviewOverview, type ReviewPointStatus } from '../../api/reviewOverview'
+import { fetchStudentReviewOverview, type ReviewOverview, type ReviewPointStatus } from '../../api/reviewOverview'
+import { ReviewOverviewModal } from './ReviewOverviewModal'
 import type { ComplaintRecord, QuestionAnswer, StudentDetailMeta, StudentInfoItem, StudentItem } from '../../types'
 import { useWorkbenchStore } from '../../store/workbenchStore'
 import { ComplaintModal } from '../LeftPanel/ComplaintModal'
 import { LearningPathPanel } from './LearningPathPanel'
+import { api } from '../../../../lib/api'
 
 function formatDateTime(value?: string | null) {
   if (!value) return '-'
@@ -26,21 +28,6 @@ function formatDateOnly(value?: string | null) {
   }
 
   return format(date, 'yyyy-MM-dd')
-}
-
-function ReviewStatusBadge({ status }: { status: ReviewPointStatus['status'] }) {
-  const config = {
-    learning: { label: '学习中', cls: 'border-blue-200 bg-blue-50 text-blue-600' },
-    completed: { label: '已完成', cls: 'border-green-200 bg-green-50 text-green-600' },
-    pending: { label: '待推进', cls: 'border-orange-200 bg-orange-50 text-orange-600' },
-    locked: { label: '未开始', cls: 'border-gray-200 bg-gray-50 text-gray-500' },
-  }[status]
-
-  return (
-    <span className={['rounded-full border px-2 py-1 text-[10px] font-medium', config.cls].join(' ')}>
-      {config.label}
-    </span>
-  )
 }
 
 function Section({
@@ -236,9 +223,14 @@ export function StudentDetailView({
 }) {
   const [activeTab, setActiveTab] = useState<'info' | 'content'>('info')
   const [showComplaintModal, setShowComplaintModal] = useState(false)
-  const [reviewPointStatuses, setReviewPointStatuses] = useState<ReviewPointStatus[]>([])
+  const [_reviewPointStatuses, setReviewPointStatuses] = useState<ReviewPointStatus[]>([])
+  const [reviewOverviewData, setReviewOverviewData] = useState<ReviewOverview | null>(null)
+  const [showReviewModal, setShowReviewModal] = useState(false)
   const [infoDraft, setInfoDraft] = useState('')
   const [infoSaving, setInfoSaving] = useState(false)
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [allCourses, setAllCourses] = useState<{ id: number; name: string; subject: string }[]>([])
+  const [assigning, setAssigning] = useState(false)
 
   const teacherName = useWorkbenchStore((state) => state.teacherName)
   const notesMap = useWorkbenchStore((state) => state.notesMap)
@@ -256,6 +248,25 @@ export function StudentDetailView({
   const complaintsMap = useWorkbenchStore((state) => state.complaintsMap)
   const resolveComplaint = useWorkbenchStore((state) => state.resolveComplaint)
 
+  const openAssignModal = useCallback(async () => {
+    setAssignOpen(true)
+    if (allCourses.length === 0) {
+      const data = await api.get<{ id: number; name: string; subject: string }[]>('/api/teacher/courses')
+      setAllCourses(data)
+    }
+  }, [allCourses.length])
+
+  const assignCourse = useCallback(async (courseId: number) => {
+    setAssigning(true)
+    try {
+      await api.post(`/api/teacher/students/${student.id}/courses`, { courseId })
+      await loadStudentInfo(student.id)
+      setAssignOpen(false)
+    } finally {
+      setAssigning(false)
+    }
+  }, [student.id, loadStudentInfo])
+
   useEffect(() => {
     void loadStudentInfo(student.id)
     void loadStudentFlag(student.id)
@@ -270,11 +281,13 @@ export function StudentDetailView({
     fetchStudentReviewOverview(student.id)
       .then((result) => {
         if (active) {
+          setReviewOverviewData(result)
           setReviewPointStatuses(Array.isArray(result.pointStatuses) ? result.pointStatuses : [])
         }
       })
       .catch(() => {
         if (active) {
+          setReviewOverviewData(null)
           setReviewPointStatuses([])
         }
       })
@@ -290,6 +303,11 @@ export function StudentDetailView({
   const chatNotes = student.contactId ? (notesMap[student.contactId] ?? []) : []
   const complaints = complaintsMap[student.id] ?? []
   const isFlagged = flaggedMap[student.id] ?? false
+  const learningPathPointName = useMemo(() => {
+    const activeCourse = detailMeta?.courses?.find((course) => course.status !== 'completed')
+      ?? detailMeta?.courses?.[0]
+    return activeCourse?.name || student.subject || ''
+  }, [detailMeta?.courses, student.subject])
 
   const profileItems = useMemo(() => ([
     { label: '入学日期', value: formatDateOnly(detailMeta?.joinDate) },
@@ -420,7 +438,18 @@ export function StudentDetailView({
                 )}
               </Section>
 
-              <Section title="课程进度">
+              <Section
+                title="课程进度"
+                extra={
+                  <button
+                    type="button"
+                    onClick={() => void openAssignModal()}
+                    className="text-xs text-[var(--color-primary)] hover:underline"
+                  >
+                    + 分配课程
+                  </button>
+                }
+              >
                 {detailMeta?.courses?.length ? (
                   <div className="space-y-3">
                     {detailMeta.courses.map((course) => (
@@ -442,6 +471,44 @@ export function StudentDetailView({
                   <div className="text-xs text-[var(--color-text-muted)]">暂无课程进度</div>
                 )}
               </Section>
+
+              {assignOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setAssignOpen(false)}>
+                  <div className="w-80 rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                    <div className="mb-4 text-sm font-semibold text-[var(--color-text-primary)]">选择要分配的课程</div>
+                    {allCourses.length === 0 ? (
+                      <div className="text-xs text-[var(--color-text-muted)]">加载中...</div>
+                    ) : (
+                      <div className="max-h-72 space-y-2 overflow-y-auto">
+                        {allCourses
+                          .filter((c) => !detailMeta?.courses?.some((sc) => String(sc.id) === String(c.id)))
+                          .map((course) => (
+                            <button
+                              key={course.id}
+                              type="button"
+                              disabled={assigning}
+                              onClick={() => void assignCourse(course.id)}
+                              className="w-full rounded-xl border border-[var(--color-border)] p-3 text-left hover:border-[var(--color-primary)] hover:bg-[var(--color-bg-left)] disabled:opacity-50"
+                            >
+                              <div className="text-sm font-medium text-[var(--color-text-primary)]">{course.name}</div>
+                              <div className="mt-0.5 text-xs text-[var(--color-text-secondary)]">{course.subject}</div>
+                            </button>
+                          ))}
+                        {allCourses.filter((c) => !detailMeta?.courses?.some((sc) => String(sc.id) === String(c.id))).length === 0 && (
+                          <div className="text-xs text-[var(--color-text-muted)]">该学生已分配所有课程</div>
+                        )}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setAssignOpen(false)}
+                      className="mt-4 w-full rounded-xl border border-[var(--color-border)] py-2 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-left)]"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <Section
                 title="老师备注"
@@ -537,24 +604,7 @@ export function StudentDetailView({
             </>
           ) : (
             <>
-              <LearningPathPanel studentId={student.id} pointName={student.subject} />
-
-              <Section title="复盘知识点状态">
-                {reviewPointStatuses.length ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {reviewPointStatuses.map((item, index) => (
-                      <div key={`${item.pointId ?? 'point'}-${index}`} className="rounded-xl border border-[var(--color-border)] p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm font-medium text-[var(--color-text-primary)]">{item.pointName}</div>
-                          <ReviewStatusBadge status={item.status} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-xs text-[var(--color-text-muted)]">暂无复盘知识点状态</div>
-                )}
-              </Section>
+              <LearningPathPanel studentId={student.id} pointName={learningPathPointName} />
 
               <Section title="作业与提交">
                 {answers.length ? (
@@ -574,6 +624,18 @@ export function StudentDetailView({
 
       {showComplaintModal && (
         <ComplaintModal student={student} onClose={() => setShowComplaintModal(false)} />
+      )}
+
+      {showReviewModal && (
+        <ReviewOverviewModal
+          studentId={student.id}
+          initialData={reviewOverviewData}
+          onClose={() => setShowReviewModal(false)}
+          onSaved={(data) => {
+            setReviewOverviewData(data)
+            setReviewPointStatuses(Array.isArray(data.pointStatuses) ? data.pointStatuses : [])
+          }}
+        />
       )}
     </div>
   )

@@ -3,9 +3,9 @@ import { ENABLE_OVERVIEW_TAB, ENABLE_SCHEDULING_TAB } from '../../config/launch'
 import { useWorkbenchStore } from '../../store/workbenchStore'
 import { CalendarView } from './CalendarView'
 import { ChatView } from './ChatView'
+import { DataDashboardView } from './DataDashboardView'
 import { InspireBar } from './InspireBar'
 import { MailboxView } from './MailboxView'
-import { SchedulingView } from './SchedulingView'
 import { StudentsView } from './StudentsView'
 
 function DisabledFeature({ name }: { name: string }) {
@@ -21,6 +21,7 @@ const navItems = [
   { key: 'chat', label: '聊天' },
   { key: 'chatOverview', label: '聊天总览' },
   { key: 'students', label: '我的学生' },
+  { key: 'dashboard', label: '数据后台' },
   { key: 'mailbox', label: '校长信箱' },
   ...(ENABLE_OVERVIEW_TAB ? [{ key: 'overview', label: '总览' as const }] : []),
   ...(ENABLE_SCHEDULING_TAB ? [{ key: 'scheduling', label: '去排课' as const }] : []),
@@ -36,6 +37,7 @@ export function RightPanel() {
   const navValue =
     rightTab === 'schedule' ? 'schedule'
     : rightTab === 'students' ? 'students'
+    : rightTab === 'dashboard' ? 'dashboard'
     : rightTab === 'mailbox' ? 'mailbox'
     : rightTab === 'overview' && ENABLE_OVERVIEW_TAB ? 'overview'
     : rightTab === 'scheduling' && ENABLE_SCHEDULING_TAB ? 'scheduling'
@@ -64,6 +66,7 @@ export function RightPanel() {
             if (
               value === 'schedule'
               || value === 'students'
+              || value === 'dashboard'
               || value === 'mailbox'
               || value === 'overview'
               || value === 'scheduling'
@@ -82,14 +85,21 @@ export function RightPanel() {
             </div>
             <InspireBar />
           </div>
+        ) : rightTab === 'scheduling' && ENABLE_SCHEDULING_TAB ? (
+          <div className="flex h-full flex-col overflow-hidden rounded-[var(--radius-card)]">
+            <div className="flex-1 overflow-hidden">
+              <CalendarView />
+            </div>
+            <InspireBar />
+          </div>
         ) : rightTab === 'students' ? (
           <StudentsView />
+        ) : rightTab === 'dashboard' ? (
+          <DataDashboardView />
         ) : rightTab === 'mailbox' ? (
           <MailboxView />
         ) : rightTab === 'overview' && ENABLE_OVERVIEW_TAB ? (
           <DisabledFeature name="总览" />
-        ) : rightTab === 'scheduling' && ENABLE_SCHEDULING_TAB ? (
-          <SchedulingView />
         ) : (
           <ChatView />
         )}

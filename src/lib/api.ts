@@ -23,6 +23,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
   const data = text ? JSON.parse(text) : null
   if (!res.ok) {
+    if (res.status === 401) {
+      localStorage.removeItem('teacher_token')
+      window.dispatchEvent(new Event('teacher-auth-expired'))
+    }
+
     const message = data && typeof data === 'object' && 'message' in data
       ? String((data as { message?: unknown }).message || '')
       : ''

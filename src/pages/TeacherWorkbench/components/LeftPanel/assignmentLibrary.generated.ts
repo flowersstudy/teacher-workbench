@@ -39,6 +39,7 @@ export interface AssignmentCheckpointLibrary {
   theoryRows: AssignmentTheoryRow[]
   practiceItems: AssignmentResourceItem[]
   examItems: AssignmentResourceItem[]
+  remedialItems: AssignmentResourceItem[]
 }
 
 export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
@@ -59,7 +60,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "明确前置词书写的方法",
         "sourceSheet": "要点不全不准",
         "sourceRow": 2,
-        "sortOrder": 2
+        "sortOrder": 1
       },
       {
         "checkpointName": "要点不全不准",
@@ -75,7 +76,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "明确前置词书写的方法（作业讲解）",
         "sourceSheet": "要点不全不准",
         "sourceRow": 4,
-        "sortOrder": 4
+        "sortOrder": 3
       },
       {
         "checkpointName": "要点不全不准",
@@ -91,7 +92,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "要点不全不准",
         "sourceRow": 5,
-        "sortOrder": 5
+        "sortOrder": 4
       },
       {
         "checkpointName": "要点不全不准",
@@ -107,7 +108,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "要点不全不准",
         "sourceRow": 6,
-        "sortOrder": 6
+        "sortOrder": 5
       },
       {
         "checkpointName": "要点不全不准",
@@ -123,7 +124,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "明确要点取舍的方法",
         "sourceSheet": "要点不全不准",
         "sourceRow": 7,
-        "sortOrder": 7
+        "sortOrder": 6
       },
       {
         "checkpointName": "要点不全不准",
@@ -139,7 +140,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "明确要点取舍的方法（作业讲解）",
         "sourceSheet": "要点不全不准",
         "sourceRow": 8,
-        "sortOrder": 8
+        "sortOrder": 7
       },
       {
         "checkpointName": "要点不全不准",
@@ -155,7 +156,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "掌握材料通用分类依据、规则+方法",
         "sourceSheet": "要点不全不准",
         "sourceRow": 9,
-        "sortOrder": 9
+        "sortOrder": 8
       },
       {
         "checkpointName": "要点不全不准",
@@ -171,7 +172,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "掌握作答书写逻辑方法",
         "sourceSheet": "要点不全不准",
         "sourceRow": 13,
-        "sortOrder": 13
+        "sortOrder": 12
       },
       {
         "checkpointName": "要点不全不准",
@@ -187,14 +188,17 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "掌握作答书写逻辑方法（作业讲解）",
         "sourceSheet": "要点不全不准",
         "sourceRow": 14,
-        "sortOrder": 14
+        "sortOrder": 13
       },
       {
         "checkpointName": "要点不全不准",
         "knowledgePoint": "正确的申论阅读规则意识",
         "knowledgeType": "required",
         "learningStatusRaw": "江苏、北京省份必学",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "北京",
+          "江苏"
+        ],
         "courseStatus": "待补充",
         "theoryTitle": "一题多则材料的阅读思路【理论方法】",
         "videoId": "",
@@ -203,7 +207,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "要点不全不准",
         "sourceRow": 15,
-        "sortOrder": 15
+        "sortOrder": 14
       },
       {
         "checkpointName": "要点不全不准",
@@ -219,7 +223,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "明确一段话式题目如何作答的方法",
         "sourceSheet": "要点不全不准",
         "sourceRow": 16,
-        "sortOrder": 16
+        "sortOrder": 15
       },
       {
         "checkpointName": "要点不全不准",
@@ -235,14 +239,26 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "明确一段话式题目如何作答的方法（作业讲解）",
         "sourceSheet": "要点不全不准",
         "sourceRow": 17,
-        "sortOrder": 17
+        "sortOrder": 16
       },
       {
         "checkpointName": "要点不全不准",
         "knowledgePoint": "正确的申论阅读规则意识",
         "knowledgeType": "required",
         "learningStatusRaw": "广东、上海、浙江、吉林、重庆、湖北、河南、安徽、天津、山东、新疆必学",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "天津",
+          "上海",
+          "广东",
+          "浙江",
+          "山东",
+          "河南",
+          "湖北",
+          "安徽",
+          "重庆",
+          "吉林",
+          "新疆"
+        ],
         "courseStatus": "待补充",
         "theoryTitle": "一题多则材料的阅读思路【理论方法】",
         "videoId": "",
@@ -251,12 +267,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "要点不全不准",
         "sourceRow": 18,
-        "sortOrder": 18
+        "sortOrder": 17
       },
       {
         "checkpointName": "要点不全不准",
         "knowledgePoint": "正确的申论阅读规则意识",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
@@ -267,12 +283,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "要点不全不准",
         "sourceRow": 19,
-        "sortOrder": 19
+        "sortOrder": 18
       },
       {
         "checkpointName": "要点不全不准",
         "knowledgePoint": "正确的申论阅读规则意识",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "已有",
@@ -283,12 +299,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "判断、题干和材料中关于主体、主题的信息的方法",
         "sourceSheet": "要点不全不准",
         "sourceRow": 20,
-        "sortOrder": 20
+        "sortOrder": 19
       },
       {
         "checkpointName": "要点不全不准",
         "knowledgePoint": "正确的申论阅读规则意识",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "已有",
@@ -299,44 +315,44 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "判断、题干和材料中关于主体、主题的信息的方法（作业讲解）",
         "sourceSheet": "要点不全不准",
         "sourceRow": 21,
+        "sortOrder": 20
+      },
+      {
+        "checkpointName": "要点不全不准",
+        "knowledgePoint": "申论各作答要素识别与书写",
+        "knowledgeType": "optional",
+        "learningStatusRaw": "选学",
+        "provinceKeys": [],
+        "courseStatus": "已有",
+        "theoryTitle": "判断题干+材料要素一致性，学会寻找要点的方法【理论方法】",
+        "videoId": "1e6eaa05af57f3297753b090a68e3b79_1",
+        "preClassUrl": "http://img.yaotia.com/2026/04-22/1776825199675.pdf",
+        "analysisUrl": "",
+        "noteText": "",
+        "sourceSheet": "要点不全不准",
+        "sourceRow": 22,
         "sortOrder": 21
       },
       {
         "checkpointName": "要点不全不准",
         "knowledgePoint": "申论各作答要素识别与书写",
-        "knowledgeType": "required",
-        "learningStatusRaw": "选学",
-        "provinceKeys": [],
-        "courseStatus": "已有",
-        "theoryTitle": "判断题干+材料要素一致性，学会寻找要点的方法【理论方法】",
-        "videoId": "1e6eaa05af3e219ececff428b834bfec_1",
-        "preClassUrl": "http://img.yaotia.com/2025/04-18/1744978559304.pdf",
-        "analysisUrl": "",
-        "noteText": "",
-        "sourceSheet": "要点不全不准",
-        "sourceRow": 22,
-        "sortOrder": 22
-      },
-      {
-        "checkpointName": "要点不全不准",
-        "knowledgePoint": "申论各作答要素识别与书写",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "已有",
         "theoryTitle": "判断题干+材料要素一致性，学会寻找要点的方法【作业讲解】",
-        "videoId": "1e6eaa05af16261b021b9dafbaf9214c_1",
-        "preClassUrl": "http://img.yaotia.com/2025/04-17/1744880978056.pdf",
-        "analysisUrl": "http://img.yaotia.com/2025/04-27/1745725412821.pdf",
+        "videoId": "1e6eaa05af748864017e936033433447_1",
+        "preClassUrl": "http://img.yaotia.com/2026/04-22/1776825186033.pdf",
+        "analysisUrl": "http://img.yaotia.com/2026/04-22/1776825478165.pdf",
         "noteText": "",
         "sourceSheet": "要点不全不准",
         "sourceRow": 23,
-        "sortOrder": 23
+        "sortOrder": 22
       },
       {
         "checkpointName": "要点不全不准",
         "knowledgePoint": "明确前置词的作用",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "已有",
@@ -347,12 +363,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "明确前置词识别的方法",
         "sourceSheet": "要点不全不准",
         "sourceRow": 24,
-        "sortOrder": 24
+        "sortOrder": 23
       },
       {
         "checkpointName": "要点不全不准",
         "knowledgePoint": "基础词性判断",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
@@ -363,102 +379,108 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "要点不全不准",
         "sourceRow": 25,
-        "sortOrder": 25
+        "sortOrder": 24
       }
     ],
     "practiceItems": [
       {
-        "id": "要点不全不准_practice_2",
+        "id": "要点不全不准_2_食品安全监督",
         "checkpointName": "要点不全不准",
         "kind": "practice",
-        "slotKey": "practice_extra_15022",
+        "slotKey": "必学",
         "rawTitle": "刷题训练一",
         "questionTitle": "食品安全监督",
-        "displayTitle": "刷题训练一?食品安全监督",
+        "displayTitle": "刷题训练一",
         "videoId": "1e6eaa05afd6e315a32951e6284b1dfa_1",
         "preClassUrl": "http://img.yaotia.com/2026/02-10/1770715536758.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/03-26/1774509103503.pdf",
         "provinceKeys": [],
         "sourceRow": 2,
-        "sortOrder": 2
+        "sortOrder": 1
       },
       {
-        "id": "要点不全不准_practice_3",
+        "id": "要点不全不准_3_优化营商环境措施成效",
         "checkpointName": "要点不全不准",
         "kind": "practice",
-        "slotKey": "practice_extra_82238",
+        "slotKey": "必学",
         "rawTitle": "刷题训练二",
         "questionTitle": "优化营商环境措施成效",
-        "displayTitle": "刷题训练二?优化营商环境措施成效",
+        "displayTitle": "刷题训练二",
         "videoId": "1e6eaa05af8515906936145bac2fe020_1",
         "preClassUrl": "http://img.yaotia.com/2026/03-25/1774406906381.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/03-25/1774407113855.pdf",
         "provinceKeys": [],
         "sourceRow": 3,
-        "sortOrder": 3
+        "sortOrder": 2
       },
       {
-        "id": "要点不全不准_practice_4",
+        "id": "要点不全不准_4_合村不合心",
         "checkpointName": "要点不全不准",
         "kind": "practice",
-        "slotKey": "practice_extra_76282",
+        "slotKey": "必学",
         "rawTitle": "刷题训练三",
         "questionTitle": "合村不合心",
-        "displayTitle": "刷题训练三?合村不合心",
+        "displayTitle": "刷题训练三",
         "videoId": "1e6eaa05af06452cc1b2b98f65180b05_1",
         "preClassUrl": "http://img.yaotia.com/2026/02-10/1770715380540.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/02-10/1770715391883.pdf",
         "provinceKeys": [],
         "sourceRow": 4,
-        "sortOrder": 4
-      },
+        "sortOrder": 3
+      }
+    ],
+    "examItems": [
       {
-        "id": "要点不全不准_practice_5",
+        "id": "要点不全不准_5_泡菜",
         "checkpointName": "要点不全不准",
-        "kind": "practice",
-        "slotKey": "practice_extra_50964",
+        "kind": "exam",
+        "slotKey": "必学",
         "rawTitle": "考试",
         "questionTitle": "泡菜",
-        "displayTitle": "考试?泡菜",
+        "displayTitle": "考试",
         "videoId": "1e6eaa05affe0648e9b4770f56bb10f2_1",
         "preClassUrl": "http://img.yaotia.com/2026/04-18/1776505817629.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/04-18/1776505964230.pdf",
         "provinceKeys": [],
         "sourceRow": 5,
-        "sortOrder": 5
-      },
+        "sortOrder": 4
+      }
+    ],
+    "remedialItems": [
       {
-        "id": "要点不全不准_practice_6",
+        "id": "要点不全不准_6_一米高度看世界",
         "checkpointName": "要点不全不准",
-        "kind": "practice",
-        "slotKey": "practice_extra_69710",
+        "kind": "exam",
+        "slotKey": "选学",
         "rawTitle": "二次考试",
         "questionTitle": "一米高度看世界",
-        "displayTitle": "二次考试?一米高度看世界",
+        "displayTitle": "二次考试",
         "videoId": "1e6eaa05afce3d28e5185f0ea2f8cf8a_1",
         "preClassUrl": "http://img.yaotia.com/2026/04-18/1776505905191.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/04-18/1776505985537.pdf",
         "provinceKeys": [],
         "sourceRow": 6,
-        "sortOrder": 6
+        "sortOrder": 5
       },
       {
-        "id": "要点不全不准_practice_7",
+        "id": "要点不全不准_7_江苏冲刺A",
         "checkpointName": "要点不全不准",
         "kind": "practice",
-        "slotKey": "practice_extra_48177",
+        "slotKey": "选学",
         "rawTitle": "江苏、北京学员替换刷题三",
         "questionTitle": "江苏冲刺A",
-        "displayTitle": "江苏、北京学员替换刷题三?江苏冲刺A",
+        "displayTitle": "江苏、北京学员替换刷题三",
         "videoId": "1e6eaa05afcc6961d699bf6f8ca3980c_1",
         "preClassUrl": "https://img.yaotia.com/2026/04-18/1776506427491.pdf",
         "analysisUrl": "https://img.yaotia.com/2026/04-18/1776506466332.pdf",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "北京",
+          "江苏"
+        ],
         "sourceRow": 7,
-        "sortOrder": 7
+        "sortOrder": 6
       }
-    ],
-    "examItems": []
+    ]
   },
   {
     "checkpointName": "提炼转述困难",
@@ -477,7 +499,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "如何提炼准确【理论方法】",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 2,
-        "sortOrder": 2
+        "sortOrder": 1
       },
       {
         "checkpointName": "提炼转述困难",
@@ -485,7 +507,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "knowledgeType": "required",
         "learningStatusRaw": "必学",
         "provinceKeys": [],
-        "courseStatus": "已有待修改",
+        "courseStatus": "",
         "theoryTitle": "如何总结每一句的主要信息+分析句子间主要信息的共性=得出本段的主旨【作业讲解】",
         "videoId": "1e6eaa05afcb5715b1875d8d85890d77_1",
         "preClassUrl": "http://img.yaotia.com/2025/07-17/1752757043975.pdf",
@@ -493,7 +515,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "如何提炼准确【作业讲解】",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 3,
-        "sortOrder": 3
+        "sortOrder": 2
       },
       {
         "checkpointName": "提炼转述困难",
@@ -509,7 +531,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 6,
-        "sortOrder": 6
+        "sortOrder": 5
       },
       {
         "checkpointName": "提炼转述困难",
@@ -525,7 +547,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 7,
-        "sortOrder": 7
+        "sortOrder": 6
       },
       {
         "checkpointName": "提炼转述困难",
@@ -541,7 +563,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 8,
-        "sortOrder": 8
+        "sortOrder": 7
       },
       {
         "checkpointName": "提炼转述困难",
@@ -557,7 +579,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 9,
-        "sortOrder": 9
+        "sortOrder": 8
       },
       {
         "checkpointName": "提炼转述困难",
@@ -573,7 +595,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 10,
-        "sortOrder": 10
+        "sortOrder": 9
       },
       {
         "checkpointName": "提炼转述困难",
@@ -589,14 +611,22 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 11,
-        "sortOrder": 11
+        "sortOrder": 10
       },
       {
         "checkpointName": "提炼转述困难",
         "knowledgePoint": "抽象总结材料信息",
         "knowledgeType": "required",
         "learningStatusRaw": "广东、江苏、浙江、深圳、四川、河南、北京必学",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "北京",
+          "广东",
+          "深圳",
+          "浙江",
+          "江苏",
+          "河南",
+          "四川"
+        ],
         "courseStatus": "待补充",
         "theoryTitle": "数据支撑型材料如何阅读分析【理论方法】",
         "videoId": "",
@@ -605,7 +635,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 12,
-        "sortOrder": 12
+        "sortOrder": 11
       },
       {
         "checkpointName": "提炼转述困难",
@@ -621,14 +651,30 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 13,
-        "sortOrder": 13
+        "sortOrder": 12
       },
       {
         "checkpointName": "提炼转述困难",
         "knowledgePoint": "抽象总结材料信息",
         "knowledgeType": "required",
         "learningStatusRaw": "国考、江苏、四川、广东、安徽、福建、浙江、山东、山西、云南、海南、广西、湖南、北京、上海必学",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "国考",
+          "北京",
+          "上海",
+          "广东",
+          "浙江",
+          "江苏",
+          "山东",
+          "安徽",
+          "山西",
+          "广西",
+          "云南",
+          "海南",
+          "湖南",
+          "福建",
+          "四川"
+        ],
         "courseStatus": "待补充",
         "theoryTitle": "观点表态+对话类型材料如何阅读分析【理论方法】",
         "videoId": "",
@@ -637,7 +683,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 14,
-        "sortOrder": 14
+        "sortOrder": 13
       },
       {
         "checkpointName": "提炼转述困难",
@@ -653,14 +699,24 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 15,
-        "sortOrder": 15
+        "sortOrder": 14
       },
       {
         "checkpointName": "提炼转述困难",
         "knowledgePoint": "申论各作答要素识别与书写",
         "knowledgeType": "required",
         "learningStatusRaw": "安徽；黑龙江；江西；辽宁；青海；国考、河北、湖北、内蒙古必学",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "国考",
+          "湖北",
+          "安徽",
+          "黑龙江",
+          "江西",
+          "辽宁",
+          "内蒙古",
+          "河北",
+          "青海"
+        ],
         "courseStatus": "已有",
         "theoryTitle": "判断题干+材料要素一致性之变化类【理论方法】",
         "videoId": "1e6eaa05af5b425691eae7294ff9328a_1",
@@ -669,7 +725,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 16,
-        "sortOrder": 16
+        "sortOrder": 15
       },
       {
         "checkpointName": "提炼转述困难",
@@ -685,14 +741,31 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 17,
-        "sortOrder": 17
+        "sortOrder": 16
       },
       {
         "checkpointName": "提炼转述困难",
         "knowledgePoint": "申论各作答要素识别与书写",
         "knowledgeType": "required",
         "learningStatusRaw": "安徽；重庆；黑龙江；江西；辽宁；内蒙古；山西；陕西；上海、湖北、广东、深圳、浙江、山东、广西、河南",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "上海",
+          "广东",
+          "深圳",
+          "浙江",
+          "山东",
+          "河南",
+          "湖北",
+          "安徽",
+          "重庆",
+          "黑龙江",
+          "江西",
+          "辽宁",
+          "内蒙古",
+          "山西",
+          "陕西",
+          "广西"
+        ],
         "courseStatus": "已有",
         "theoryTitle": "判断题干+材料要素一致性之特点亮点【理论方法】",
         "videoId": "1e6eaa05af306e4cbedca9f3472b1137_1",
@@ -701,7 +774,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 18,
-        "sortOrder": 18
+        "sortOrder": 17
       },
       {
         "checkpointName": "提炼转述困难",
@@ -717,12 +790,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 19,
-        "sortOrder": 19
+        "sortOrder": 18
       },
       {
         "checkpointName": "提炼转述困难",
         "knowledgePoint": "正确的申论阅读规则意识",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
@@ -733,12 +806,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 20,
-        "sortOrder": 20
+        "sortOrder": 19
       },
       {
         "checkpointName": "提炼转述困难",
         "knowledgePoint": "正确的申论阅读规则意识",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "已有",
@@ -749,12 +822,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 21,
-        "sortOrder": 21
+        "sortOrder": 20
       },
       {
         "checkpointName": "提炼转述困难",
         "knowledgePoint": "正确的申论阅读规则意识",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "已有",
@@ -765,12 +838,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 22,
-        "sortOrder": 22
+        "sortOrder": 21
       },
       {
         "checkpointName": "提炼转述困难",
         "knowledgePoint": "基础词性判断",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
@@ -781,87 +854,147 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "提炼转述困难",
         "sourceRow": 23,
-        "sortOrder": 23
+        "sortOrder": 22
       }
     ],
     "practiceItems": [
       {
-        "id": "提炼转述困难_practice_2",
+        "id": "提炼转述困难_2_B公司的+R2:R8案例，对企业创新的启示",
         "checkpointName": "提炼转述困难",
         "kind": "practice",
-        "slotKey": "practice_extra_41635",
+        "slotKey": "必学",
         "rawTitle": "刷题一",
-        "questionTitle": "小麦 启示",
-        "displayTitle": "刷题一?小麦 启示",
-        "videoId": "1e6eaa05afcbdccd7a117d44a9db3eea_1",
-        "preClassUrl": "http://img.yaotia.com/2025/04-24/1745476210850.pdf",
-        "analysisUrl": "http://img.yaotia.com/2025/04-24/1745476260735.pdf",
+        "questionTitle": "B公司的+R2:R8案例，对企业创新的启示",
+        "displayTitle": "刷题一",
+        "videoId": "1e6eaa05af3ed7cde9463fb188dbfc8e_1",
+        "preClassUrl": "http://img.yaotia.com/2026/04-20/1776680130156.pdf",
+        "analysisUrl": "http://img.yaotia.com/2026/04-20/1776680328682.pdf",
         "provinceKeys": [],
         "sourceRow": 2,
-        "sortOrder": 2
+        "sortOrder": 1
       },
       {
-        "id": "提炼转述困难_practice_3",
+        "id": "提炼转述困难_3_隆金公司为什么称为主角",
         "checkpointName": "提炼转述困难",
         "kind": "practice",
-        "slotKey": "practice_extra_15506",
+        "slotKey": "必学",
         "rawTitle": "刷题二",
         "questionTitle": "隆金公司为什么称为主角",
-        "displayTitle": "刷题二?隆金公司为什么称为主角",
+        "displayTitle": "刷题二",
         "videoId": "1e6eaa05af36b4366859adb47594c167_1",
         "preClassUrl": "https://img.yaotia.com/2026/04-18/1776515628004.pdf",
         "analysisUrl": "https://img.yaotia.com/2026/04-18/1776515591466.pdf",
         "provinceKeys": [],
         "sourceRow": 3,
-        "sortOrder": 3
+        "sortOrder": 2
       },
       {
-        "id": "提炼转述困难_practice_4",
+        "id": "提炼转述困难_4_返乡打算不同的原因",
         "checkpointName": "提炼转述困难",
         "kind": "practice",
-        "slotKey": "practice_extra_81147",
+        "slotKey": "必学",
         "rawTitle": "刷题三",
         "questionTitle": "返乡打算不同的原因",
-        "displayTitle": "刷题三?返乡打算不同的原因",
+        "displayTitle": "刷题三",
         "videoId": "1e6eaa05af90ec6759cd55eac85690a4_1",
         "preClassUrl": "http://img.yaotia.com/2026/01-25/1769338739610.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/01-25/1769339218857.pdf",
         "provinceKeys": [],
         "sourceRow": 4,
+        "sortOrder": 3
+      }
+    ],
+    "examItems": [
+      {
+        "id": "提炼转述困难_5_为什么莲花社区脱胎换骨",
+        "checkpointName": "提炼转述困难",
+        "kind": "exam",
+        "slotKey": "必学",
+        "rawTitle": "考试",
+        "questionTitle": "为什么莲花社区脱胎换骨",
+        "displayTitle": "考试",
+        "videoId": "1e6eaa05af8b874ef1540eb21edfa875_1",
+        "preClassUrl": "http://img.yaotia.com/2026/01-31/1769865017724.pdf",
+        "analysisUrl": "http://img.yaotia.com/2026/01-31/1769864996454.pdf",
+        "provinceKeys": [],
+        "sourceRow": 5,
         "sortOrder": 4
       },
       {
-        "id": "提炼转述困难_practice_5",
+        "id": "提炼转述困难_6_窑洞",
         "checkpointName": "提炼转述困难",
-        "kind": "practice",
-        "slotKey": "practice_extra_50964",
-        "rawTitle": "考试",
+        "kind": "exam",
+        "slotKey": "必学",
+        "rawTitle": "二次考试",
         "questionTitle": "窑洞",
-        "displayTitle": "考试?窑洞",
+        "displayTitle": "二次考试",
         "videoId": "1e6eaa05af64e49e61fb9179e5310f3b_1",
         "preClassUrl": "http://img.yaotia.com/2025/05-13/1746511413469.pdf",
         "analysisUrl": "http://img.yaotia.com/2025/05-13/1746511468055.pdf",
         "provinceKeys": [],
-        "sourceRow": 5,
-        "sortOrder": 5
-      },
-      {
-        "id": "提炼转述困难_practice_6",
-        "checkpointName": "提炼转述困难",
-        "kind": "practice",
-        "slotKey": "practice_extra_69710",
-        "rawTitle": "二次考试",
-        "questionTitle": "法律顾问作用",
-        "displayTitle": "二次考试?法律顾问作用",
-        "videoId": "1e6eaa05af104aae0a647b93ffbac6fd_1",
-        "preClassUrl": "http://img.yaotia.com/2025/12-30/1767059840638.pdf",
-        "analysisUrl": "http://img.yaotia.com/2025/12-30/1767059841040.pdf",
-        "provinceKeys": [],
         "sourceRow": 6,
-        "sortOrder": 6
+        "sortOrder": 5
       }
     ],
-    "examItems": []
+    "remedialItems": [
+      {
+        "id": "提炼转述困难_7_亮点",
+        "checkpointName": "提炼转述困难",
+        "kind": "practice",
+        "slotKey": "选学",
+        "rawTitle": "【安徽；重庆；黑龙江；江西；辽宁；内蒙古；山西；陕西；上海、湖北、广东、深圳、浙江、山东、广西、河南】省份替换刷题训练三",
+        "questionTitle": "亮点",
+        "displayTitle": "【安徽；重庆；黑龙江；江西；辽宁；内蒙古；山西；陕西；上海、湖北、广东、深圳、浙江、山东、广西、河南】省份替换刷题训练三",
+        "videoId": "1e6eaa05af30f631f09497f9a3d32241_1",
+        "preClassUrl": "http://img.yaotia.com/2025/12-30/1767059196759.pdf",
+        "analysisUrl": "http://img.yaotia.com/2025/12-30/1767059462019.pdf",
+        "provinceKeys": [
+          "上海",
+          "广东",
+          "深圳",
+          "浙江",
+          "山东",
+          "河南",
+          "湖北",
+          "安徽",
+          "重庆",
+          "黑龙江",
+          "江西",
+          "辽宁",
+          "内蒙古",
+          "山西",
+          "陕西",
+          "广西"
+        ],
+        "sourceRow": 7,
+        "sortOrder": 6
+      },
+      {
+        "id": "提炼转述困难_8_变化",
+        "checkpointName": "提炼转述困难",
+        "kind": "practice",
+        "slotKey": "选学",
+        "rawTitle": "安徽；黑龙江；江西；辽宁；青海；国考、河北、湖北、内蒙古必学",
+        "questionTitle": "变化",
+        "displayTitle": "安徽；黑龙江；江西；辽宁；青海；国考、河北、湖北、内蒙古必学",
+        "videoId": "1e6eaa05afeb89757a5409bb5a0cf576_1",
+        "preClassUrl": "https://img.yaotia.com/2026/04-20/1776681021274.pdf",
+        "analysisUrl": "https://img.yaotia.com/2026/04-20/1776681069400.pdf",
+        "provinceKeys": [
+          "国考",
+          "湖北",
+          "安徽",
+          "黑龙江",
+          "江西",
+          "辽宁",
+          "内蒙古",
+          "河北",
+          "青海"
+        ],
+        "sourceRow": 8,
+        "sortOrder": 7
+      }
+    ]
   },
   {
     "checkpointName": "对策推导困难",
@@ -880,7 +1013,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "对策推导困难",
         "sourceRow": 2,
-        "sortOrder": 2
+        "sortOrder": 1
       },
       {
         "checkpointName": "对策推导困难",
@@ -896,7 +1029,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "对策推导困难",
         "sourceRow": 3,
-        "sortOrder": 3
+        "sortOrder": 2
       },
       {
         "checkpointName": "对策推导困难",
@@ -912,7 +1045,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "对策推导困难",
         "sourceRow": 4,
-        "sortOrder": 4
+        "sortOrder": 3
       },
       {
         "checkpointName": "对策推导困难",
@@ -928,14 +1061,16 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "对策推导困难",
         "sourceRow": 5,
-        "sortOrder": 5
+        "sortOrder": 4
       },
       {
         "checkpointName": "对策推导困难",
         "knowledgePoint": "对策推导方法+书写方法",
         "knowledgeType": "required",
         "learningStatusRaw": "广东必学",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "广东"
+        ],
         "courseStatus": "已有",
         "theoryTitle": "明确对策顺序如何判定和书写【理论方法】",
         "videoId": "1e6eaa05afc2a0b6a4a7e92eee2557bd_1",
@@ -944,7 +1079,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "对策推导困难",
         "sourceRow": 6,
-        "sortOrder": 6
+        "sortOrder": 5
       },
       {
         "checkpointName": "对策推导困难",
@@ -960,12 +1095,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "对策推导困难",
         "sourceRow": 7,
-        "sortOrder": 7
+        "sortOrder": 6
       },
       {
         "checkpointName": "对策推导困难",
         "knowledgePoint": "对策书写规则认知、判定",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "已有",
@@ -976,12 +1111,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "对策推导困难",
         "sourceRow": 8,
-        "sortOrder": 8
+        "sortOrder": 7
       },
       {
         "checkpointName": "对策推导困难",
         "knowledgePoint": "对策书写规则认知、判定",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "已有",
@@ -992,102 +1127,107 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "对策推导困难",
         "sourceRow": 9,
-        "sortOrder": 9
+        "sortOrder": 8
       }
     ],
     "practiceItems": [
       {
-        "id": "对策推导困难_practice_2",
+        "id": "对策推导困难_2_石宽镇",
         "checkpointName": "对策推导困难",
         "kind": "practice",
-        "slotKey": "practice_extra_15022",
+        "slotKey": "必学",
         "rawTitle": "刷题训练一",
         "questionTitle": "石宽镇",
-        "displayTitle": "刷题训练一?石宽镇",
+        "displayTitle": "刷题训练一",
         "videoId": "1e6eaa05afdfe1d95f3f5f31980b512c_1",
         "preClassUrl": "http://img.yaotia.com/2025/05-28/1748408061253.pdf",
         "analysisUrl": "http://img.yaotia.com/2025/05-28/1748408039716.pdf",
         "provinceKeys": [],
         "sourceRow": 2,
-        "sortOrder": 2
+        "sortOrder": 1
       },
       {
-        "id": "对策推导困难_practice_3",
+        "id": "对策推导困难_3_公共座椅",
         "checkpointName": "对策推导困难",
         "kind": "practice",
-        "slotKey": "practice_extra_82238",
+        "slotKey": "必学",
         "rawTitle": "刷题训练二",
         "questionTitle": "公共座椅",
-        "displayTitle": "刷题训练二?公共座椅",
+        "displayTitle": "刷题训练二",
         "videoId": "1e6eaa05af9870c7217d57aa1b32aeda_1",
         "preClassUrl": "http://img.yaotia.com/2026/01-10/1768011294109.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/01-10/1768011665282.pdf",
         "provinceKeys": [],
         "sourceRow": 3,
-        "sortOrder": 3
+        "sortOrder": 2
       },
       {
-        "id": "对策推导困难_practice_4",
+        "id": "对策推导困难_4_公交便民驿站",
         "checkpointName": "对策推导困难",
         "kind": "practice",
-        "slotKey": "practice_extra_76282",
+        "slotKey": "必学",
         "rawTitle": "刷题训练三",
         "questionTitle": "公交便民驿站",
-        "displayTitle": "刷题训练三?公交便民驿站",
+        "displayTitle": "刷题训练三",
         "videoId": "1e6eaa05af124a30332b1752cda34024_1",
         "preClassUrl": "http://img.yaotia.com/2026/01-10/1768011294535.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/01-10/1768011665709.pdf",
         "provinceKeys": [],
         "sourceRow": 4,
-        "sortOrder": 4
-      },
+        "sortOrder": 3
+      }
+    ],
+    "examItems": [
       {
-        "id": "对策推导困难_practice_5",
+        "id": "对策推导困难_5_公路管理",
         "checkpointName": "对策推导困难",
-        "kind": "practice",
-        "slotKey": "practice_extra_50964",
+        "kind": "exam",
+        "slotKey": "必学",
         "rawTitle": "考试",
         "questionTitle": "公路管理",
-        "displayTitle": "考试?公路管理",
+        "displayTitle": "考试",
         "videoId": "1e6eaa05af543f74dc67a2c892152980_1",
         "preClassUrl": "http://img.yaotia.com/2026/01-10/1768011297575.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/01-10/1768011667830.pdf",
         "provinceKeys": [],
         "sourceRow": 5,
-        "sortOrder": 5
-      },
+        "sortOrder": 4
+      }
+    ],
+    "remedialItems": [
       {
-        "id": "对策推导困难_practice_6",
+        "id": "对策推导困难_6_农家乐",
         "checkpointName": "对策推导困难",
-        "kind": "practice",
-        "slotKey": "practice_extra_69710",
+        "kind": "exam",
+        "slotKey": "选学",
         "rawTitle": "二次考试",
         "questionTitle": "农家乐",
-        "displayTitle": "二次考试?农家乐",
+        "displayTitle": "二次考试",
         "videoId": "1e6eaa05af38c39f71f044c42c22762f_1",
         "preClassUrl": "https://img.yaotia.com/2026/04-18/1776514532676.pdf",
         "analysisUrl": "https://img.yaotia.com/2026/04-18/1776514539832.pdf",
         "provinceKeys": [],
         "sourceRow": 6,
-        "sortOrder": 6
+        "sortOrder": 5
       },
       {
-        "id": "对策推导困难_practice_7",
+        "id": "对策推导困难_7_小温 粤菜培训班",
         "checkpointName": "对策推导困难",
         "kind": "practice",
-        "slotKey": "practice_extra_93897",
+        "slotKey": "选学",
         "rawTitle": "广东考生替换刷题训练三",
         "questionTitle": "小温 粤菜培训班",
-        "displayTitle": "广东考生替换刷题训练三?小温 粤菜培训班",
+        "displayTitle": "广东考生替换刷题训练三",
         "videoId": "1e6eaa05afae9c156019a35e242fba8c_1",
         "preClassUrl": "http://img.yaotia.com/2025/05-28/1748408211374.pdf",
         "analysisUrl": "http://img.yaotia.com/2025/07-23/1753263904444.pdf",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "广东"
+        ],
         "sourceRow": 7,
-        "sortOrder": 7
+        "sortOrder": 6
       }
-    ],
-    "examItems": []
+    ]
   },
   {
     "checkpointName": "分析结构不清",
@@ -1106,7 +1246,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "现有知识理论不是这么拆的，但是可以让学员暂时现学：明确解释词语的分析题如何答【理论方法】",
         "sourceSheet": "分析结构不清",
         "sourceRow": 2,
-        "sortOrder": 2
+        "sortOrder": 1
       },
       {
         "checkpointName": "分析结构不清",
@@ -1122,7 +1262,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "明确解释词语的分析题如何答【作业讲解】",
         "sourceSheet": "分析结构不清",
         "sourceRow": 3,
-        "sortOrder": 3
+        "sortOrder": 2
       },
       {
         "checkpointName": "分析结构不清",
@@ -1138,7 +1278,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "明确解释句子的分析题如何答【理论方法】",
         "sourceSheet": "分析结构不清",
         "sourceRow": 4,
-        "sortOrder": 4
+        "sortOrder": 3
       },
       {
         "checkpointName": "分析结构不清",
@@ -1154,7 +1294,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "明确解释句子的分析题如何答【作业讲解】",
         "sourceSheet": "分析结构不清",
         "sourceRow": 5,
-        "sortOrder": 5
+        "sortOrder": 4
       },
       {
         "checkpointName": "分析结构不清",
@@ -1170,7 +1310,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "现有知识理论叫做：明确解释型分析答题框架【理论方法】；",
         "sourceSheet": "分析结构不清",
         "sourceRow": 6,
-        "sortOrder": 6
+        "sortOrder": 5
       },
       {
         "checkpointName": "分析结构不清",
@@ -1186,14 +1326,21 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "明确解释型分析答题框架【作业讲解】",
         "sourceSheet": "分析结构不清",
         "sourceRow": 7,
-        "sortOrder": 7
+        "sortOrder": 6
       },
       {
         "checkpointName": "分析结构不清",
         "knowledgePoint": "评价型必要组成部分判定和书写方法",
         "knowledgeType": "required",
         "learningStatusRaw": "江苏、国考、广东、吉林、北京、江苏、河南省份必学",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "国考",
+          "北京",
+          "广东",
+          "江苏",
+          "河南",
+          "吉林"
+        ],
         "courseStatus": "已有待修改",
         "theoryTitle": "评价型分析的判定方法+开头写法【理论方法】和评价型分析的判定方法+开头写法【作业讲解】",
         "videoId": "1e6eaa05af6cf4a468741d9041092698_1",
@@ -1202,14 +1349,16 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "现有知识理论叫做：明确评价型分析答题框架【理论方法】；",
         "sourceSheet": "分析结构不清",
         "sourceRow": 8,
-        "sortOrder": 8
+        "sortOrder": 7
       },
       {
         "checkpointName": "分析结构不清",
         "knowledgePoint": "比较型必要组成部分判定和书写方法",
         "knowledgeType": "required",
         "learningStatusRaw": "江苏省份必学",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "江苏"
+        ],
         "courseStatus": "已有待修改",
         "theoryTitle": "比较型分析的判定方法+开头写法【理论方法】和比较型分析的判定方法+开头写法【作业讲解】",
         "videoId": "1e6eaa05afb4289f355d18f7f7fb0c2e_1",
@@ -1218,7 +1367,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "现有知识理论叫做：明确比较型分析答题框架【理论方法】；",
         "sourceSheet": "分析结构不清",
         "sourceRow": 12,
-        "sortOrder": 12
+        "sortOrder": 11
       },
       {
         "checkpointName": "分析结构不清",
@@ -1234,12 +1383,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "现有知识理论叫做：明确混合型分析如何答【理论方法】；",
         "sourceSheet": "分析结构不清",
         "sourceRow": 16,
-        "sortOrder": 16
+        "sortOrder": 15
       },
       {
         "checkpointName": "分析结构不清",
         "knowledgePoint": "分析结构规则认知",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
@@ -1250,102 +1399,107 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "分析结构不清",
         "sourceRow": 18,
-        "sortOrder": 18
+        "sortOrder": 17
       }
     ],
     "practiceItems": [
       {
-        "id": "分析结构不清_practice_2",
+        "id": "分析结构不清_2_文化特派员",
         "checkpointName": "分析结构不清",
         "kind": "practice",
-        "slotKey": "practice_extra_15022",
+        "slotKey": "必学",
         "rawTitle": "刷题训练一",
         "questionTitle": "文化特派员",
-        "displayTitle": "刷题训练一?文化特派员",
+        "displayTitle": "刷题训练一",
         "videoId": "1e6eaa05af5cd12a7f9114a3ed325149_1",
         "preClassUrl": "http://img.yaotia.com/2026/01-25/1769342827655.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/01-25/1769342942957.pdf",
         "provinceKeys": [],
         "sourceRow": 2,
-        "sortOrder": 2
+        "sortOrder": 1
       },
       {
-        "id": "分析结构不清_practice_3",
+        "id": "分析结构不清_3_只此青绿",
         "checkpointName": "分析结构不清",
         "kind": "practice",
-        "slotKey": "practice_extra_82238",
+        "slotKey": "必学",
         "rawTitle": "刷题训练二",
         "questionTitle": "只此青绿",
-        "displayTitle": "刷题训练二?只此青绿",
+        "displayTitle": "刷题训练二",
         "videoId": "1e6eaa05af26fd3f1a8c28ae0cade8b6_1",
         "preClassUrl": "http://img.yaotia.com/2026/02-15/1771101620783.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/02-15/1771101786513.pdf",
         "provinceKeys": [],
         "sourceRow": 3,
-        "sortOrder": 3
+        "sortOrder": 2
       },
       {
-        "id": "分析结构不清_practice_4",
+        "id": "分析结构不清_4_一大会址纪念馆",
         "checkpointName": "分析结构不清",
         "kind": "practice",
-        "slotKey": "practice_extra_76282",
+        "slotKey": "必学",
         "rawTitle": "刷题训练三",
         "questionTitle": "一大会址纪念馆",
-        "displayTitle": "刷题训练三?一大会址纪念馆",
+        "displayTitle": "刷题训练三",
         "videoId": "1e6eaa05af40e3da1528ba064d909b94_1",
         "preClassUrl": "https://img.yaotia.com/2026/04-18/1776513479295.pdf",
         "analysisUrl": "https://img.yaotia.com/2026/04-18/1776513484668.pdf",
         "provinceKeys": [],
         "sourceRow": 4,
-        "sortOrder": 4
-      },
+        "sortOrder": 3
+      }
+    ],
+    "examItems": [
       {
-        "id": "分析结构不清_practice_5",
+        "id": "分析结构不清_5_眼中心中柜台",
         "checkpointName": "分析结构不清",
-        "kind": "practice",
-        "slotKey": "practice_extra_50964",
+        "kind": "exam",
+        "slotKey": "必学",
         "rawTitle": "考试",
         "questionTitle": "眼中心中柜台",
-        "displayTitle": "考试?眼中心中柜台",
+        "displayTitle": "考试",
         "videoId": "1e6eaa05afd120ca79b6f69ce7a11d1a_1",
         "preClassUrl": "http://img.yaotia.com/2025/06-25/1750855885637.pdf",
         "analysisUrl": "http://img.yaotia.com/2025/06-25/1750855918792.pdf",
         "provinceKeys": [],
         "sourceRow": 5,
-        "sortOrder": 5
-      },
+        "sortOrder": 4
+      }
+    ],
+    "remedialItems": [
       {
-        "id": "分析结构不清_practice_6",
+        "id": "分析结构不清_6_民之所盼",
         "checkpointName": "分析结构不清",
-        "kind": "practice",
-        "slotKey": "practice_extra_69710",
+        "kind": "exam",
+        "slotKey": "选学",
         "rawTitle": "二次考试",
         "questionTitle": "民之所盼",
-        "displayTitle": "二次考试?民之所盼",
+        "displayTitle": "二次考试",
         "videoId": "1e6eaa05afb65a0693ca8ffab27eb0f2_1",
         "preClassUrl": "http://img.yaotia.com/2026/04-10/1775801352845.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/04-10/1775801410273.pdf",
         "provinceKeys": [],
         "sourceRow": 6,
-        "sortOrder": 6
+        "sortOrder": 5
       },
       {
-        "id": "分析结构不清_practice_7",
+        "id": "分析结构不清_7_体检式执法",
         "checkpointName": "分析结构不清",
         "kind": "practice",
-        "slotKey": "practice_extra_92605",
+        "slotKey": "选学",
         "rawTitle": "江苏学员替换刷题训练二",
         "questionTitle": "体检式执法",
-        "displayTitle": "江苏学员替换刷题训练二?体检式执法",
+        "displayTitle": "江苏学员替换刷题训练二",
         "videoId": "1e6eaa05af0d3448ebf11acf9d77510b_1",
         "preClassUrl": "http://img.yaotia.com/2026/04-18/1776512804283.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/04-18/1776512734192.pdf",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "江苏"
+        ],
         "sourceRow": 7,
-        "sortOrder": 7
+        "sortOrder": 6
       }
-    ],
-    "examItems": []
+    ]
   },
   {
     "checkpointName": "公文结构不清",
@@ -1364,7 +1518,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "根据题干发文目的分析格式和答题逻辑【理论方法】",
         "sourceSheet": "公文结构不清",
         "sourceRow": 2,
-        "sortOrder": 2
+        "sortOrder": 1
       },
       {
         "checkpointName": "公文结构不清",
@@ -1380,14 +1534,25 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "根据题干发文目的分析格式和答题逻辑【作业讲解】",
         "sourceSheet": "公文结构不清",
         "sourceRow": 3,
-        "sortOrder": 3
+        "sortOrder": 2
       },
       {
         "checkpointName": "公文结构不清",
         "knowledgePoint": "公文格式规则认知",
         "knowledgeType": "required",
         "learningStatusRaw": "国考、云南、天津、广东、海南、河北、湖南、宁夏、江苏、深圳必学",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "国考",
+          "天津",
+          "广东",
+          "深圳",
+          "江苏",
+          "云南",
+          "海南",
+          "河北",
+          "湖南",
+          "宁夏"
+        ],
         "courseStatus": "待补充",
         "theoryTitle": "非完整公文（不含格式）情况的判定和书写规则【理论方法】",
         "videoId": "",
@@ -1396,7 +1561,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "公文结构不清",
         "sourceRow": 4,
-        "sortOrder": 4
+        "sortOrder": 3
       },
       {
         "checkpointName": "公文结构不清",
@@ -1412,7 +1577,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "信息传达类公文如何写【理论方法】",
         "sourceSheet": "公文结构不清",
         "sourceRow": 5,
-        "sortOrder": 5
+        "sortOrder": 4
       },
       {
         "checkpointName": "公文结构不清",
@@ -1428,7 +1593,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "信息传达类公文如何写【作业讲解】",
         "sourceSheet": "公文结构不清",
         "sourceRow": 6,
-        "sortOrder": 6
+        "sortOrder": 5
       },
       {
         "checkpointName": "公文结构不清",
@@ -1444,7 +1609,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "宣传教育类公文如何写【理论方法】",
         "sourceSheet": "公文结构不清",
         "sourceRow": 7,
-        "sortOrder": 7
+        "sortOrder": 6
       },
       {
         "checkpointName": "公文结构不清",
@@ -1460,14 +1625,17 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "宣传教育类公文如何写【作业讲解】",
         "sourceSheet": "公文结构不清",
         "sourceRow": 8,
-        "sortOrder": 8
+        "sortOrder": 7
       },
       {
         "checkpointName": "公文结构不清",
         "knowledgePoint": "特殊情况下，必要组成部分书写方法",
         "knowledgeType": "required",
         "learningStatusRaw": "江苏、深圳必学",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "深圳",
+          "江苏"
+        ],
         "courseStatus": "待补充",
         "theoryTitle": "不拘泥于给定资料时，如何书写必要组成部分",
         "videoId": "",
@@ -1476,12 +1644,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "公文结构不清",
         "sourceRow": 9,
-        "sortOrder": 9
+        "sortOrder": 8
       },
       {
         "checkpointName": "公文结构不清",
         "knowledgePoint": "公文结构规则认知",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
@@ -1492,12 +1660,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "公文结构不清",
         "sourceRow": 10,
-        "sortOrder": 10
+        "sortOrder": 9
       },
       {
         "checkpointName": "公文结构不清",
         "knowledgePoint": "公文结构规则认知",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "已有待修改",
@@ -1508,12 +1676,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "认识公文格式【理论方法】",
         "sourceSheet": "公文结构不清",
         "sourceRow": 11,
-        "sortOrder": 11
+        "sortOrder": 10
       },
       {
         "checkpointName": "公文结构不清",
         "knowledgePoint": "公文结构规则认知",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "已有待修改",
@@ -1524,12 +1692,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "认识公文格式【作业讲解】",
         "sourceSheet": "公文结构不清",
         "sourceRow": 12,
-        "sortOrder": 12
+        "sortOrder": 11
       },
       {
         "checkpointName": "公文结构不清",
         "knowledgePoint": "公文特殊分类规则认知",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
@@ -1540,102 +1708,116 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "公文结构不清",
         "sourceRow": 13,
-        "sortOrder": 13
+        "sortOrder": 12
       }
     ],
     "practiceItems": [
       {
-        "id": "公文结构不清_practice_2",
+        "id": "公文结构不清_2_发言提纲",
         "checkpointName": "公文结构不清",
         "kind": "practice",
-        "slotKey": "practice_extra_15022",
+        "slotKey": "必学",
         "rawTitle": "刷题训练一",
         "questionTitle": "发言提纲",
-        "displayTitle": "刷题训练一?发言提纲",
+        "displayTitle": "刷题训练一",
         "videoId": "1e6eaa05af7c8e282ea8f3dcea694da8_1",
         "preClassUrl": "https://img.yaotia.com/2026/04-18/1776517707805.pdf",
         "analysisUrl": "https://img.yaotia.com/2026/04-18/1776516533410.pdf",
         "provinceKeys": [],
         "sourceRow": 2,
-        "sortOrder": 2
+        "sortOrder": 1
       },
       {
-        "id": "公文结构不清_practice_3",
+        "id": "公文结构不清_3_短评",
         "checkpointName": "公文结构不清",
         "kind": "practice",
-        "slotKey": "practice_extra_82238",
+        "slotKey": "必学",
         "rawTitle": "刷题训练二",
         "questionTitle": "短评",
-        "displayTitle": "刷题训练二?短评",
+        "displayTitle": "刷题训练二",
         "videoId": "1e6eaa05afd6805ac82990725896c200_1",
         "preClassUrl": "https://img.yaotia.com/2026/04-18/1776516941677.pd",
         "analysisUrl": "https://img.yaotia.com/2026/04-18/1776517882199.pdf",
         "provinceKeys": [],
         "sourceRow": 3,
-        "sortOrder": 3
+        "sortOrder": 2
       },
       {
-        "id": "公文结构不清_practice_4",
+        "id": "公文结构不清_4_公开信",
         "checkpointName": "公文结构不清",
         "kind": "practice",
-        "slotKey": "practice_extra_76282",
+        "slotKey": "必学",
         "rawTitle": "刷题训练三",
         "questionTitle": "公开信",
-        "displayTitle": "刷题训练三?公开信",
+        "displayTitle": "刷题训练三",
         "videoId": "1e6eaa05af8058942c1f44d2767b7c37_1",
         "preClassUrl": "https://img.yaotia.com/2026/04-18/1776516868324.pdf",
         "analysisUrl": "https://img.yaotia.com/2026/04-18/1776516706112.pdf",
         "provinceKeys": [],
         "sourceRow": 4,
-        "sortOrder": 4
-      },
+        "sortOrder": 3
+      }
+    ],
+    "examItems": [
       {
-        "id": "公文结构不清_practice_5",
+        "id": "公文结构不清_5_发言稿",
         "checkpointName": "公文结构不清",
-        "kind": "practice",
-        "slotKey": "practice_extra_50964",
+        "kind": "exam",
+        "slotKey": "必学",
         "rawTitle": "考试",
         "questionTitle": "发言稿",
-        "displayTitle": "考试?发言稿",
+        "displayTitle": "考试",
         "videoId": "1e6eaa05af865c94e9f042d65846c4cb_1",
         "preClassUrl": "https://img.yaotia.com/2026/04-18/1776518057957.pdf",
         "analysisUrl": "https://img.yaotia.com/2026/04-18/1776518107117.pdf",
         "provinceKeys": [],
         "sourceRow": 5,
+        "sortOrder": 4
+      }
+    ],
+    "remedialItems": [
+      {
+        "id": "公文结构不清_6_汇报提纲",
+        "checkpointName": "公文结构不清",
+        "kind": "exam",
+        "slotKey": "选学",
+        "rawTitle": "二次考试",
+        "questionTitle": "汇报提纲",
+        "displayTitle": "二次考试",
+        "videoId": "1e6eaa05af71609a5ea6f2c6f5ef5201_1",
+        "preClassUrl": "https://img.yaotia.com/2026/04-20/1776682485592.pdf",
+        "analysisUrl": "https://img.yaotia.com/2026/04-20/1776682262134.pdf",
+        "provinceKeys": [],
+        "sourceRow": 6,
         "sortOrder": 5
       },
       {
-        "id": "公文结构不清_practice_6",
+        "id": "公文结构不清_7_广东冲刺县镇",
         "checkpointName": "公文结构不清",
         "kind": "practice",
-        "slotKey": "practice_extra_69710",
-        "rawTitle": "二次考试",
-        "questionTitle": "无陪护病房",
-        "displayTitle": "二次考试?无陪护病房",
-        "videoId": "1e6eaa05afe16d19ec24e3ee3645bb83_1",
-        "preClassUrl": "https://img.yaotia.com/2026/04-18/1776518300722.pdf",
-        "analysisUrl": "https://img.yaotia.com/2026/04-18/1776518351146.pdf",
-        "provinceKeys": [],
-        "sourceRow": 6,
-        "sortOrder": 6
-      },
-      {
-        "id": "公文结构不清_practice_7",
-        "checkpointName": "公文结构不清",
-        "kind": "practice",
-        "slotKey": "practice_extra_71811",
+        "slotKey": "选学",
         "rawTitle": "【国考、云南、天津、广东、海南、河北、湖南、宁夏、江苏、深圳】省份替换刷题三",
         "questionTitle": "广东冲刺县镇",
-        "displayTitle": "【国考、云南、天津、广东、海南、河北、湖南、宁夏、江苏、深圳】省份替换刷题三?广东冲刺县镇",
+        "displayTitle": "【国考、云南、天津、广东、海南、河北、湖南、宁夏、江苏、深圳】省份替换刷题三",
         "videoId": "1e6eaa05af44d2b8e795ceb0087704d8_1",
         "preClassUrl": "https://img.yaotia.com/2026/04-18/1776517445840.pdf",
         "analysisUrl": "https://img.yaotia.com/2026/04-18/1776517369362.pdf",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "国考",
+          "天津",
+          "广东",
+          "深圳",
+          "江苏",
+          "云南",
+          "海南",
+          "河北",
+          "湖南",
+          "宁夏"
+        ],
         "sourceRow": 7,
-        "sortOrder": 7
+        "sortOrder": 6
       }
-    ],
-    "examItems": []
+    ]
   },
   {
     "checkpointName": "作文立意不准",
@@ -1644,7 +1826,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "checkpointName": "作文立意不准",
         "knowledgePoint": "关键词识别、判断和组合书写方法",
         "knowledgeType": "required",
-        "learningStatusRaw": "",
+        "learningStatusRaw": "必学",
         "provinceKeys": [],
         "courseStatus": "已有待修改",
         "theoryTitle": "明确题干关键词的拆解方法【理论方法】",
@@ -1654,13 +1836,13 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "明确从题干中分析立意【理论方法】",
         "sourceSheet": "作文立意不准",
         "sourceRow": 2,
-        "sortOrder": 2
+        "sortOrder": 1
       },
       {
         "checkpointName": "作文立意不准",
         "knowledgePoint": "关键词识别、判断和组合书写方法",
         "knowledgeType": "required",
-        "learningStatusRaw": "",
+        "learningStatusRaw": "必学",
         "provinceKeys": [],
         "courseStatus": "已有待修改",
         "theoryTitle": "明确题干关键词的拆解方法【作业讲解】",
@@ -1670,13 +1852,13 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "明确从题干中分析立意【作业讲解】",
         "sourceSheet": "作文立意不准",
         "sourceRow": 3,
-        "sortOrder": 3
+        "sortOrder": 2
       },
       {
         "checkpointName": "作文立意不准",
         "knowledgePoint": "关键词识别、判断和组合书写方法",
         "knowledgeType": "required",
-        "learningStatusRaw": "",
+        "learningStatusRaw": "必学",
         "provinceKeys": [],
         "courseStatus": "已有待修改",
         "theoryTitle": "明确从材料中确定关键词的方法【理论方法】",
@@ -1686,13 +1868,13 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文立意不准",
         "sourceRow": 4,
-        "sortOrder": 4
+        "sortOrder": 3
       },
       {
         "checkpointName": "作文立意不准",
         "knowledgePoint": "关键词识别、判断和组合书写方法",
         "knowledgeType": "required",
-        "learningStatusRaw": "",
+        "learningStatusRaw": "必学",
         "provinceKeys": [],
         "courseStatus": "已有待修改",
         "theoryTitle": "明确从材料中确定关键词的方法【作业讲解】",
@@ -1702,13 +1884,13 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文立意不准",
         "sourceRow": 5,
-        "sortOrder": 5
+        "sortOrder": 4
       },
       {
         "checkpointName": "作文立意不准",
         "knowledgePoint": "关键词识别、判断和组合书写方法",
         "knowledgeType": "required",
-        "learningStatusRaw": "",
+        "learningStatusRaw": "必学",
         "provinceKeys": [],
         "courseStatus": "已有待修改",
         "theoryTitle": "明确关键词选择+整合到同一层级的方法【理论方法】",
@@ -1718,13 +1900,13 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文立意不准",
         "sourceRow": 6,
-        "sortOrder": 6
+        "sortOrder": 5
       },
       {
         "checkpointName": "作文立意不准",
         "knowledgePoint": "关键词识别、判断和组合书写方法",
         "knowledgeType": "required",
-        "learningStatusRaw": "",
+        "learningStatusRaw": "必学",
         "provinceKeys": [],
         "courseStatus": "已有待修改",
         "theoryTitle": "明确关键词选择+整合到同一层级的方法【作业讲解】",
@@ -1734,13 +1916,13 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文立意不准",
         "sourceRow": 7,
-        "sortOrder": 7
+        "sortOrder": 6
       },
       {
         "checkpointName": "作文立意不准",
         "knowledgePoint": "申论作文规则认知",
-        "knowledgeType": "required",
-        "learningStatusRaw": "",
+        "knowledgeType": "optional",
+        "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "已有",
         "theoryTitle": "明确掌握文体基本认识【理论方法】",
@@ -1750,13 +1932,13 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文立意不准",
         "sourceRow": 8,
-        "sortOrder": 8
+        "sortOrder": 7
       },
       {
         "checkpointName": "作文立意不准",
         "knowledgePoint": "申论作文规则认知",
-        "knowledgeType": "required",
-        "learningStatusRaw": "",
+        "knowledgeType": "optional",
+        "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "已有",
         "theoryTitle": "明确掌握文体基本认识【作业讲解】",
@@ -1766,13 +1948,13 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文立意不准",
         "sourceRow": 9,
-        "sortOrder": 9
+        "sortOrder": 8
       },
       {
         "checkpointName": "作文立意不准",
         "knowledgePoint": "主题词识别、判断方法",
-        "knowledgeType": "required",
-        "learningStatusRaw": "",
+        "knowledgeType": "optional",
+        "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
         "theoryTitle": "明确主题词（话题）识别的方法+优先原则【理论方法】",
@@ -1782,13 +1964,13 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文立意不准",
         "sourceRow": 10,
-        "sortOrder": 10
+        "sortOrder": 9
       },
       {
         "checkpointName": "作文立意不准",
         "knowledgePoint": "主题词识别、判断方法",
-        "knowledgeType": "required",
-        "learningStatusRaw": "",
+        "knowledgeType": "optional",
+        "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
         "theoryTitle": "明确主题词（话题）识别的方法+优先原则【作业讲解】",
@@ -1798,13 +1980,13 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文立意不准",
         "sourceRow": 11,
-        "sortOrder": 11
+        "sortOrder": 10
       },
       {
         "checkpointName": "作文立意不准",
         "knowledgePoint": "主题词识别、判断方法",
-        "knowledgeType": "required",
-        "learningStatusRaw": "",
+        "knowledgeType": "optional",
+        "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
         "theoryTitle": "明确如何从材料中找主题词的方法【理论方法】",
@@ -1814,13 +1996,13 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文立意不准",
         "sourceRow": 12,
-        "sortOrder": 12
+        "sortOrder": 11
       },
       {
         "checkpointName": "作文立意不准",
         "knowledgePoint": "主题词识别、判断方法",
-        "knowledgeType": "required",
-        "learningStatusRaw": "",
+        "knowledgeType": "optional",
+        "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
         "theoryTitle": "明确如何从材料中找主题词的方法【作业讲解】",
@@ -1830,87 +2012,90 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文立意不准",
         "sourceRow": 13,
-        "sortOrder": 13
+        "sortOrder": 12
       }
     ],
     "practiceItems": [
       {
-        "id": "作文立意不准_practice_2",
+        "id": "作文立意不准_2_数字时代的城市治理",
         "checkpointName": "作文立意不准",
         "kind": "practice",
-        "slotKey": "practice_extra_15022",
+        "slotKey": "必学",
         "rawTitle": "刷题训练一",
-        "questionTitle": "学者文章",
-        "displayTitle": "刷题训练一?学者文章",
-        "videoId": "1e6eaa05af1b0990cb0f567c5998f78b_",
-        "preClassUrl": "http://img.yaotia.com/2026/01-21/1768986860230.pdf",
-        "analysisUrl": "http://img.yaotia.com/2025/07-17/1752738805459.pdf",
+        "questionTitle": "数字时代的城市治理",
+        "displayTitle": "刷题训练一",
+        "videoId": "1e6eaa05afb6a4437c43f23ab87800c5_1",
+        "preClassUrl": "http://img.yaotia.com/2026/02-15/1771099679696.pdf",
+        "analysisUrl": "http://img.yaotia.com/2026/02-15/1771099840518.pdf",
         "provinceKeys": [],
         "sourceRow": 2,
-        "sortOrder": 2
+        "sortOrder": 1
       },
       {
-        "id": "作文立意不准_practice_3",
+        "id": "作文立意不准_3_复活不难，活好不易",
         "checkpointName": "作文立意不准",
         "kind": "practice",
-        "slotKey": "practice_extra_82238",
+        "slotKey": "必学",
         "rawTitle": "刷题训练二",
         "questionTitle": "复活不难，活好不易",
-        "displayTitle": "刷题训练二?复活不难，活好不易",
+        "displayTitle": "刷题训练二",
         "videoId": "1e6eaa05af7c290b032b22bb55559aa7_1",
         "preClassUrl": "http://img.yaotia.com/2026/01-21/1768989359637.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/01-21/1768989812388.pdf",
         "provinceKeys": [],
         "sourceRow": 3,
-        "sortOrder": 3
+        "sortOrder": 2
       },
       {
-        "id": "作文立意不准_practice_4",
+        "id": "作文立意不准_4_今天的播种，未来的收获",
         "checkpointName": "作文立意不准",
         "kind": "practice",
-        "slotKey": "practice_extra_76282",
+        "slotKey": "必学",
         "rawTitle": "刷题训练三",
         "questionTitle": "今天的播种，未来的收获",
-        "displayTitle": "刷题训练三?今天的播种，未来的收获",
+        "displayTitle": "刷题训练三",
         "videoId": "1e6eaa05afab76694ff7011e202b8d26_1",
         "preClassUrl": "http://img.yaotia.com/2026/01-21/1768989564228.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/01-21/1768990006125.pdf",
         "provinceKeys": [],
         "sourceRow": 4,
-        "sortOrder": 4
-      },
+        "sortOrder": 3
+      }
+    ],
+    "examItems": [
       {
-        "id": "作文立意不准_practice_5",
+        "id": "作文立意不准_5_流动与新生",
         "checkpointName": "作文立意不准",
-        "kind": "practice",
-        "slotKey": "practice_extra_50964",
+        "kind": "exam",
+        "slotKey": "必学",
         "rawTitle": "考试",
         "questionTitle": "流动与新生",
-        "displayTitle": "考试?流动与新生",
+        "displayTitle": "考试",
         "videoId": "1e6eaa05af15b87585e99ad013114054_1",
         "preClassUrl": "http://img.yaotia.com/2025/07-17/1752662296131.pdf",
         "analysisUrl": "http://img.yaotia.com/2025/07-17/1752738805961.pdf",
         "provinceKeys": [],
         "sourceRow": 5,
-        "sortOrder": 5
-      },
+        "sortOrder": 4
+      }
+    ],
+    "remedialItems": [
       {
-        "id": "作文立意不准_practice_6",
+        "id": "作文立意不准_6_力、理、利",
         "checkpointName": "作文立意不准",
-        "kind": "practice",
-        "slotKey": "practice_extra_69710",
+        "kind": "exam",
+        "slotKey": "选学",
         "rawTitle": "二次考试",
         "questionTitle": "力、理、利",
-        "displayTitle": "二次考试?力、理、利",
+        "displayTitle": "二次考试",
         "videoId": "1e6eaa05af7e3fa25087a040c26a600c_1",
         "preClassUrl": "http://img.yaotia.com/2026/01-21/1768984260810.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/01-21/1768984413553.pdf",
         "provinceKeys": [],
         "sourceRow": 6,
-        "sortOrder": 6
+        "sortOrder": 5
       }
-    ],
-    "examItems": []
+    ]
   },
   {
     "checkpointName": "作文逻辑不清",
@@ -1926,10 +2111,10 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "videoId": "1e6eaa05af2e0e1fba3b74c3bc3b0caa_1",
         "preClassUrl": "http://img.yaotia.com/2025/07-15/1752571631444.pdf",
         "analysisUrl": "",
-        "noteText": "",
+        "noteText": "整个标准必学，都能被现有这两节课包含：明确论证思路【理论方法】；",
         "sourceSheet": "作文逻辑不清",
         "sourceRow": 2,
-        "sortOrder": 2
+        "sortOrder": 1
       },
       {
         "checkpointName": "作文逻辑不清",
@@ -1942,10 +2127,10 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "videoId": "1e6eaa05af6585eba6fe22be45882fc4_1",
         "preClassUrl": "http://img.yaotia.com/2025/07-15/1752566181213.pdf",
         "analysisUrl": "http://img.yaotia.com/2025/07-15/1752567377995.pdf",
-        "noteText": "",
+        "noteText": "明确论证思路【作业讲解】",
         "sourceSheet": "作文逻辑不清",
         "sourceRow": 3,
-        "sortOrder": 3
+        "sortOrder": 2
       },
       {
         "checkpointName": "作文逻辑不清",
@@ -1961,7 +2146,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文逻辑不清",
         "sourceRow": 4,
-        "sortOrder": 4
+        "sortOrder": 3
       },
       {
         "checkpointName": "作文逻辑不清",
@@ -1977,7 +2162,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文逻辑不清",
         "sourceRow": 5,
-        "sortOrder": 5
+        "sortOrder": 4
       },
       {
         "checkpointName": "作文逻辑不清",
@@ -1993,14 +2178,18 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文逻辑不清",
         "sourceRow": 6,
-        "sortOrder": 6
+        "sortOrder": 5
       },
       {
         "checkpointName": "作文逻辑不清",
         "knowledgePoint": "策论文如何书写",
         "knowledgeType": "required",
         "learningStatusRaw": "江苏、湖北、广东省份必学",
-        "provinceKeys": [],
+        "provinceKeys": [
+          "广东",
+          "江苏",
+          "湖北"
+        ],
         "courseStatus": "已有",
         "theoryTitle": "明确策论文如何书写【理论方法】",
         "videoId": "1e6eaa05af31a2d2dc642ced811ef72a_1",
@@ -2009,12 +2198,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文逻辑不清",
         "sourceRow": 7,
-        "sortOrder": 7
+        "sortOrder": 6
       },
       {
         "checkpointName": "作文逻辑不清",
         "knowledgePoint": "论证分层书写、判定方法",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
@@ -2025,12 +2214,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文逻辑不清",
         "sourceRow": 8,
-        "sortOrder": 8
+        "sortOrder": 7
       },
       {
         "checkpointName": "作文逻辑不清",
         "knowledgePoint": "论证分层书写、判定方法",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
@@ -2041,87 +2230,90 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文逻辑不清",
         "sourceRow": 9,
-        "sortOrder": 9
+        "sortOrder": 8
       }
     ],
     "practiceItems": [
       {
-        "id": "作文逻辑不清_practice_2",
+        "id": "作文逻辑不清_2_创新是规避风险最大的方式",
         "checkpointName": "作文逻辑不清",
         "kind": "practice",
-        "slotKey": "practice_extra_15022",
+        "slotKey": "必学",
         "rawTitle": "刷题训练一",
         "questionTitle": "创新是规避风险最大的方式",
-        "displayTitle": "刷题训练一?创新是规避风险最大的方式",
+        "displayTitle": "刷题训练一",
         "videoId": "1e6eaa05af4205720b0a6f302a37a9bd_1",
         "preClassUrl": "http://img.yaotia.com/2026/01-21/1768988447913.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/01-21/1768987817368.pdf",
         "provinceKeys": [],
         "sourceRow": 2,
-        "sortOrder": 2
+        "sortOrder": 1
       },
       {
-        "id": "作文逻辑不清_practice_3",
+        "id": "作文逻辑不清_3_科技是最大的公益",
         "checkpointName": "作文逻辑不清",
         "kind": "practice",
-        "slotKey": "practice_extra_82238",
+        "slotKey": "必学",
         "rawTitle": "刷题训练二",
         "questionTitle": "科技是最大的公益",
-        "displayTitle": "刷题训练二?科技是最大的公益",
+        "displayTitle": "刷题训练二",
         "videoId": "1e6eaa05af8d3a8b562c73baf58c0ec3_1",
         "preClassUrl": "http://img.yaotia.com/2026/03-07/1772865529617.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/03-07/1772865625228.pdf",
         "provinceKeys": [],
         "sourceRow": 3,
-        "sortOrder": 3
+        "sortOrder": 2
       },
       {
-        "id": "作文逻辑不清_practice_4",
+        "id": "作文逻辑不清_4_今天的播种",
         "checkpointName": "作文逻辑不清",
         "kind": "practice",
-        "slotKey": "practice_extra_76282",
+        "slotKey": "必学",
         "rawTitle": "刷题训练三",
         "questionTitle": "今天的播种",
-        "displayTitle": "刷题训练三?今天的播种",
+        "displayTitle": "刷题训练三",
         "videoId": "1e6eaa05afab76694ff7011e202b8d26_1",
         "preClassUrl": "http://img.yaotia.com/2026/02-15/1771104295058.pdf",
         "analysisUrl": "http://img.yaotia.com/2026/02-15/1771104390103.pdf",
         "provinceKeys": [],
         "sourceRow": 4,
-        "sortOrder": 4
-      },
+        "sortOrder": 3
+      }
+    ],
+    "examItems": [
       {
-        "id": "作文逻辑不清_practice_5",
+        "id": "作文逻辑不清_5_流动与新生",
         "checkpointName": "作文逻辑不清",
-        "kind": "practice",
-        "slotKey": "practice_extra_50964",
+        "kind": "exam",
+        "slotKey": "必学",
         "rawTitle": "考试",
         "questionTitle": "流动与新生",
-        "displayTitle": "考试?流动与新生",
+        "displayTitle": "考试",
         "videoId": "1e6eaa05af15b87585e99ad013114054_1",
         "preClassUrl": "http://img.yaotia.com/2025/07-17/1752662296131.pdf",
         "analysisUrl": "http://img.yaotia.com/2025/07-17/1752738805961.pdf",
         "provinceKeys": [],
         "sourceRow": 5,
-        "sortOrder": 5
-      },
+        "sortOrder": 4
+      }
+    ],
+    "remedialItems": [
       {
-        "id": "作文逻辑不清_practice_6",
+        "id": "作文逻辑不清_6_学者文章",
         "checkpointName": "作文逻辑不清",
-        "kind": "practice",
-        "slotKey": "practice_extra_69710",
+        "kind": "exam",
+        "slotKey": "选学",
         "rawTitle": "二次考试",
         "questionTitle": "学者文章",
-        "displayTitle": "二次考试?学者文章",
+        "displayTitle": "二次考试",
         "videoId": "1e6eaa05af1b0990cb0f567c5998f78b_1",
         "preClassUrl": "http://img.yaotia.com/2026/01-21/1768986860230.pdf",
         "analysisUrl": "http://img.yaotia.com/2025/07-17/1752738805459.pdf",
         "provinceKeys": [],
         "sourceRow": 6,
-        "sortOrder": 6
+        "sortOrder": 5
       }
-    ],
-    "examItems": []
+    ]
   },
   {
     "checkpointName": "作文表达不畅",
@@ -2140,7 +2332,7 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "明确文章语言如何优美——开头【理论课程】",
         "sourceSheet": "作文表达不畅",
         "sourceRow": 2,
-        "sortOrder": 2
+        "sortOrder": 1
       },
       {
         "checkpointName": "作文表达不畅",
@@ -2156,12 +2348,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "明确文章语言如何优美——开头【作业讲解】",
         "sourceSheet": "作文表达不畅",
         "sourceRow": 3,
-        "sortOrder": 3
+        "sortOrder": 2
       },
       {
         "checkpointName": "作文表达不畅",
         "knowledgePoint": "语言标准认知",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
@@ -2172,12 +2364,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文表达不畅",
         "sourceRow": 6,
-        "sortOrder": 6
+        "sortOrder": 5
       },
       {
         "checkpointName": "作文表达不畅",
         "knowledgePoint": "语言标准认知",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
@@ -2188,12 +2380,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文表达不畅",
         "sourceRow": 7,
-        "sortOrder": 7
+        "sortOrder": 6
       },
       {
         "checkpointName": "作文表达不畅",
         "knowledgePoint": "语言标准认知",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
@@ -2204,12 +2396,12 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文表达不畅",
         "sourceRow": 8,
-        "sortOrder": 8
+        "sortOrder": 7
       },
       {
         "checkpointName": "作文表达不畅",
         "knowledgePoint": "语言标准认知",
-        "knowledgeType": "required",
+        "knowledgeType": "optional",
         "learningStatusRaw": "选学",
         "provinceKeys": [],
         "courseStatus": "待补充",
@@ -2220,10 +2412,11 @@ export const CHECKPOINT_ASSIGNMENT_LIBRARY: AssignmentCheckpointLibrary[] = [
         "noteText": "",
         "sourceSheet": "作文表达不畅",
         "sourceRow": 9,
-        "sortOrder": 9
+        "sortOrder": 8
       }
     ],
     "practiceItems": [],
-    "examItems": []
+    "examItems": [],
+    "remedialItems": []
   }
-] as AssignmentCheckpointLibrary[]
+]

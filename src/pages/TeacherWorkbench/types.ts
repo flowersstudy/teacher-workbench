@@ -12,7 +12,7 @@ export type TaskKey =
 
 export type MessageTabKey = 'yesterdayUnreplied' | 'abnormalUsers' | 'todayMessages' | 'complaints' | 'colleagues'
 
-export type RightTabKey = 'schedule' | 'chat' | 'students' | 'mailbox' | 'overview' | 'scheduling'
+export type RightTabKey = 'schedule' | 'chat' | 'students' | 'dashboard' | 'mailbox' | 'overview' | 'scheduling'
 
 export interface ContactItem {
   id: string
