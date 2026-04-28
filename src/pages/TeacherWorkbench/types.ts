@@ -6,7 +6,7 @@ export type TaskKey =
   | 'pendingLeave'
   | 'pendingAssign'
   | 'pendingLink'
-  | 'newStudent'
+  | 'liveDrill'
   | 'pendingHandout'
   | 'pendingFeedback'
 
@@ -42,8 +42,13 @@ export interface TaskListItem {
   tmLink?: string
   studentId?: string
   eventId?: string
-  linkType?: 'class' | 'replay'
+  taskRowId?: string
+  linkType?: 'live' | 'replay'
+  courseType?: 'diagnose' | 'consensus' | 'correction'
+  pointName?: string
   feedbackId?: string
+  presetCheckpoints?: string[]
+  preferredTeacherId?: string
 }
 
 export interface CalEvent {
@@ -75,7 +80,7 @@ export interface ChatMessage {
   audioDuration?: number
 }
 
-export type GroupRole = '带教老师' | '学管' | '校长' | '诊断老师' | '学生'
+export type GroupRole = '\u5e26\u6559\u8001\u5e08' | '\u5b66\u7ba1' | '\u6821\u957f' | '\u8bca\u65ad\u8001\u5e08' | '\u5b66\u751f'
 
 export interface GroupMember {
   role: GroupRole
@@ -83,12 +88,22 @@ export interface GroupMember {
   teacherId?: string
 }
 
+export interface PrivateChatSession {
+  id: string
+  groupContactId: string
+  memberName: string
+  memberRole: GroupRole
+  avatarColor: string
+  lastMsg?: string
+  lastTime?: string
+}
+
 export interface ContactNote {
   id: string
   contactId: string
   authorName: string
   text: string
-  createdAt: string   // ISO 字符串
+  createdAt: string
 }
 
 export interface AbnormalStudent {
@@ -136,7 +151,7 @@ export interface StudentFeedback {
 }
 
 export type AnswerStatus = 'pending' | 'reviewed'
-export type QuestionType = '入学诊断' | '卡点练习题' | '卡点考试' | '整卷批改'
+export type QuestionType = '\u5165\u5b66\u8bca\u65ad' | '\u5361\u70b9\u7ec3\u4e60\u9898' | '\u5361\u70b9\u8003\u8bd5' | '\u6574\u5377\u6279\u6539'
 
 export interface QuestionAnswer {
   id: string
@@ -174,26 +189,10 @@ export interface Replay {
   duration?: string
 }
 
-export interface KpointTeacherGroup {
-  kpoint: string
-  color: string
-  teachers: { role: string; name: string }[]
-}
-
-export interface PrivateChatSession {
-  id: string              // `pm_${groupContactId}_${memberName}`
-  groupContactId: string
-  memberName: string
-  memberRole: GroupRole
-  avatarColor: string
-  lastMsg?: string
-  lastTime?: string
-}
-
 export interface PracticeQuestion {
   id: string
-  title: string                              // 训练动作描述
-  selectionType: 'default' | 'manual' | 'weak'  // 默认勾选 / 手动勾选 / 补弱勾选
+  title: string
+  selectionType: 'default' | 'manual' | 'weak'
   videoId?: string
   handoutPdf?: string
   analysisPdf?: string
@@ -201,17 +200,24 @@ export interface PracticeQuestion {
 
 export interface CheckpointContent {
   id: string
-  name: string                          // 卡点名称，如"堆砌式论述"
-  theoryVideoId?: string                // 理论课保利威视频 ID
+  name: string
+  theoryVideoId?: string
   theoryHandoutPdf?: string
   examTitle?: string
   examVideoId?: string
   examHandoutPdf?: string
   examAnalysisPdf?: string
-  practiceQuestions: PracticeQuestion[] // 可分配的刷题题目库
-  standardPath: string[]                // 标准版路径 DAY1–DAY7
-  learningObjectives: string[]          // 去重版最小颗粒（学习目标）
+  practiceQuestions: PracticeQuestion[]
+  standardPath: string[]
+  learningObjectives: string[]
 }
+
+export interface KpointTeacherGroup {
+  kpoint: string
+  color: string
+  teachers: { role: string; name: string }[]
+}
+
 
 export interface StudentInfoItem {
   id: string
@@ -219,7 +225,7 @@ export interface StudentInfoItem {
   authorName: string
   authorRole: string
   content: string
-  createdAt: string   // ISO 字符串
+  createdAt: string
 }
 
 export interface StudentCourseProgress {
@@ -238,11 +244,17 @@ export interface StudentTeamTeacher {
   status?: string
 }
 
+export interface CheckpointTab {
+  name: string
+  hasData: boolean
+}
+
 export interface StudentDetailMeta {
   joinDate: string | null
   sessionCount: number
   totalHours: number
   courses: StudentCourseProgress[]
+  checkpoints: CheckpointTab[]
   teamTeachers: StudentTeamTeacher[]
   profile: {
     gender?: string | null
@@ -268,12 +280,12 @@ export interface ComplaintRecord {
   id: string
   studentId: string
   studentName: string
-  demand: string          // 学生诉求
-  reason: string          // 投诉原因
-  suggestion: string      // 解决建议
-  resolvers: string[]     // 建议解决人（角色名）
+  demand: string          // 閻庢冻濡囬弫鎾舵嫚婢跺婀?
+  reason: string          // 闁硅埖娲濋惁鏃堝储閻旈攱绀?
+  suggestion: string      // 閻熸瑱绲介崰鍛嚈妤︽鍞?
+  resolvers: string[]     // 鐎点倝缂氶鍛喆閿濆懎鏋€濞存粎灏ㄧ槐娆戞喆閹烘洖顥忛柛姘▌缁?
   deadline: string        // YYYY-MM-DD
-  extraNote: string       // 补充说明（可选）
+  extraNote: string       // 閻炴稏鍎遍崢鏍嫚鐎涙ɑ顫栭柨娑樼墕瑜版煡鏌呮径娑氱
   attachments: ComplaintAttachment[]
   submittedBy: string
   submittedAt: string     // ISO

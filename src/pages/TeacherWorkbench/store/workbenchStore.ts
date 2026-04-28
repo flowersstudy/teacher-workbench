@@ -151,29 +151,30 @@ function contactIdByStudentId(contacts: import('../types').ContactItem[]): Recor
 function mapTeamRole(role: string | null | undefined): string {
   switch (role) {
     case 'coach':
-      return '带教老师'
+      return '\u5e26\u6559\u8001\u5e08'
     case 'diagnosis':
-      return '诊断老师'
+      return '\u8bca\u65ad\u8001\u5e08'
     case 'manager':
-      return '学管'
+      return '\u5b66\u7ba1'
     case 'principal':
-      return '校长'
+      return '\u6821\u957f'
     default:
-      return role || '老师'
+      return role || '\u8001\u5e08'
   }
 }
 
 function mapSubmissionReviewType(reviewType: string | null | undefined): QuestionAnswer['questionType'] {
   switch (reviewType) {
-    case '入学诊断':
-    case '卡点练习题':
-    case '卡点考试':
-    case '整卷批改':
-      return reviewType
-    case '二阶试卷':
-      return '整卷批改'
+    case '\u5165\u5b66\u8bca\u65ad':
+      return '\u5165\u5b66\u8bca\u65ad'
+    case '\u5361\u70b9\u7ec3\u4e60\u9898':
+      return '\u5361\u70b9\u7ec3\u4e60\u9898'
+    case '\u5361\u70b9\u8003\u8bd5':
+      return '\u5361\u70b9\u8003\u8bd5'
+    case '\u6574\u5377\u6279\u6539':
+      return '\u6574\u5377\u6279\u6539'
     default:
-      return '整卷批改'
+      return '\u6574\u5377\u6279\u6539'
   }
 }
 
@@ -182,7 +183,23 @@ function buildSubmissionTitle(reviewType: unknown, checkpoint: unknown, fileName
   if (fileTitle) return fileTitle
 
   const parts = [reviewType, checkpoint].filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-  return parts.join(' · ') || '作答记录'
+  return parts.join(' · ') || '\u4f5c\u7b54\u8bb0\u5f55'
+}
+
+function normalizeCalendarDate(value: unknown): string {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    const isoMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})/)
+    if (isoMatch) return isoMatch[1]
+  }
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10)
+  }
+
+  const fallback = String(value ?? '').trim()
+  const fallbackMatch = fallback.match(/^(\d{4}-\d{2}-\d{2})/)
+  return fallbackMatch ? fallbackMatch[1] : fallback
 }
 
 interface WorkbenchState {
@@ -222,13 +239,13 @@ interface WorkbenchState {
   addCalendarEvent: (event: CalEvent) => void
   updateCalendarEvent: (event: CalEvent) => void
   deleteCalendarEvent: (id: string) => void
-  setEventLink: (eventId: string, link: string) => void
+  setEventLink: (studentId: string, courseType: string, linkType: 'live' | 'replay', link: string, pointName: string) => Promise<void>
   loadCalendarEvents: () => Promise<void>
   linkUploadItem: TaskListItem | null
   openLinkUpload: (item: TaskListItem) => void
   closeLinkUpload: () => void
   uploadReplayMaterial: (eventId: string, category: string, link: string) => Promise<void>
-  uploadHandoutMaterial: (eventId: string, file: File) => Promise<void>
+  uploadHandoutMaterial: (taskRowId: string, file: File) => Promise<void>
   handoutUploadItem: TaskListItem | null
   openHandoutUpload: (item: TaskListItem) => void
   closeHandoutUpload: () => void
@@ -269,18 +286,14 @@ interface WorkbenchState {
   addNote: (contactId: string, text: string, authorName: string) => Promise<void>
   deleteNote: (contactId: string, noteId: string) => Promise<void>
   loadNotes: (contactId: string) => Promise<void>
-  // ── 学生刷题分配 studentId → checkpointId → questionId[] ──
   studentPracticeAssignments: Record<string, Record<string, string[]>>
   setStudentPracticeAssignment: (studentId: string, checkpointId: string, questionIds: string[]) => void
-  // ── 学生每天自定义备注 studentId → dayNum → note ──
   studentDayNotes: Record<string, Record<number, string>>
   setStudentDayNote: (studentId: string, day: number, note: string) => void
-  // ── 投诉 ──
-  complaintsMap: Record<string, ComplaintRecord[]>   // studentId → records
+  complaintsMap: Record<string, ComplaintRecord[]>   // studentId 闂?records
   loadComplaints: () => Promise<void>
   addComplaint: (record: Omit<ComplaintRecord, 'id' | 'submittedAt' | 'status'>) => Promise<void>
   resolveComplaint: (studentId: string, complaintId: string, resolvedNote: string) => Promise<void>
-  // ── 私聊 ──
   privateSessions: PrivateChatSession[]
   privateMsgMap: Record<string, ChatMessage[]>
   selectedPmId: string | null
@@ -298,7 +311,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   studentFeedbackOpen: false,
   calendarEvents: [],
   teacherName: getTeacherNameFromToken(),
-  taskCounts: { pendingClass: 0, pendingReply: 0, abnormalUser: 0, pendingReview: 0, pendingLeave: 0, pendingAssign: 0, pendingLink: 0, newStudent: 0, pendingHandout: 0, pendingFeedback: 0 },
+  taskCounts: { pendingClass: 0, pendingReply: 0, abnormalUser: 0, pendingReview: 0, pendingLeave: 0, pendingAssign: 0, pendingLink: 0, liveDrill: 0, pendingHandout: 0, pendingFeedback: 0 },
   loadTaskCounts: async () => {
     const data = await api.get<{
       pendingClass?: number
@@ -320,7 +333,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
           abnormalUser:   data.abnormal      ?? 0,
           pendingReview:  data.pendingGrade  ?? 0,
           pendingLeave:   data.pendingLeave  ?? 0,
-          newStudent:     data.newStudents   ?? 0,
+          liveDrill:      0,
           pendingAssign:  data.pendingAssign ?? 0,
           pendingLink:    data.pendingLink   ?? 0,
           pendingHandout: data.pendingHandout ?? 0,
@@ -337,7 +350,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     pendingLeave: [],
     pendingAssign: [],
     pendingLink: [],
-    newStudent: [],
+    liveDrill: [],
     pendingHandout: [],
     pendingFeedback: [],
   },
@@ -353,7 +366,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         pendingLeave: Array.isArray(data.pendingLeave) ? data.pendingLeave : [],
         pendingAssign: Array.isArray(data.pendingAssign) ? data.pendingAssign : [],
         pendingLink: Array.isArray(data.pendingLink) ? data.pendingLink : [],
-        newStudent: Array.isArray(data.newStudent) ? data.newStudent : [],
+        liveDrill: [],
         pendingHandout: Array.isArray(data.pendingHandout) ? data.pendingHandout : [],
         pendingFeedback: Array.isArray(data.pendingFeedback) ? data.pendingFeedback : [],
       },
@@ -370,7 +383,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         status:      (r.status as StudentItem['status']) ?? 'normal',
         subject:     String(r.subject ?? ''),
         grade:       String(r.grade ?? ''),
-        lastSession: r.last_session_date ? String(r.last_session_date).slice(0, 10) : '暂无',
+        lastSession: r.last_session_date ? String(r.last_session_date).slice(0, 10) : '\u6682\u65e0',
         avatar:      String(r.name).slice(0, 1),
         color:       STUDENT_COLORS[i % STUDENT_COLORS.length],
         contactId:   contactMap[String(r.id)],
@@ -444,8 +457,8 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         id: clientId,
         clientId,
         contactId,
-        sender: '带教老师',
-        senderName: get().teacherName || '老师',
+        sender: '\u5e26\u6559\u8001\u5e08',
+        senderName: get().teacherName || '\u8001\u5e08',
         text,
         time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
         date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
@@ -618,7 +631,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         pending: false,
         replyTo: buildReplyPreview(currentMessages, mapped.replyToId),
       }
-      const senderType = nextMessage.sender === '带教老师' ? 'teacher' : 'student'
+      const senderType = nextMessage.sender === '\u5e26\u6559\u8001\u5e08' ? 'teacher' : 'student'
 
       set((s) => ({
         chatMessagesMap: {
@@ -677,7 +690,6 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       selectedContactId: contactId,
       lastContactId: contactId,
       rightTab: 'chat',
-      selectedPmId: null,
       chatContacts: s.chatContacts.map((item) =>
         item.id === contactId ? { ...item, unreadCount: 0 } : item,
       ),
@@ -726,20 +738,18 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     set((s) => ({ calendarEvents: s.calendarEvents.filter((e) => e.id !== id) }))
     void api.delete(`/api/teacher/calendar/${id}`)
   },
-  setEventLink: async (eventId, link) => {
-    set((s) => ({
-      calendarEvents: s.calendarEvents.map((e) => e.id === eventId ? { ...e, link } : e),
-    }))
-    await api.put(`/api/teacher/calendar/${eventId}/link`, { link })
+  setEventLink: async (studentId, courseType, linkType, link, pointName) => {
+    await api.post('/api/teacher/live-link', { studentId, courseType, linkType, link, pointName })
     await get().loadTaskCounts()
     await get().loadTaskItems()
+    await get().loadStudentInfo(studentId)
   },
   loadCalendarEvents: async () => {
     const data = await api.get<Array<Record<string, unknown>>>('/api/teacher/calendar')
     if (!Array.isArray(data)) return
     const events: CalEvent[] = data.map((r) => ({
       id: String(r.id),
-      date: r.date as string,
+      date: normalizeCalendarDate(r.date),
       startTime: r.start_time as string,
       endTime: r.end_time as string,
       title: r.title as string,
@@ -756,9 +766,9 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     await get().loadTaskCounts()
     await get().loadTaskItems()
   },
-  uploadHandoutMaterial: async (eventId, file) => {
+  uploadHandoutMaterial: async (taskRowId, file) => {
     const form = new FormData()
-    form.append('eventId', eventId)
+    form.append('taskRowId', taskRowId)
     form.append('file', file)
     await api.postForm('/api/teacher/materials/handout', form)
     await get().loadTaskCounts()
@@ -868,6 +878,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       flagReason?: string | null
       flagSeverity?: string | null
       courses?: Array<Record<string, unknown>>
+      checkpoints?: Array<{ name: string; hasData: boolean }>
       sessionCount?: number
       totalHours?: number
       teamTeachers?: Array<Record<string, unknown>>
@@ -887,7 +898,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         id: String(submission.id),
         questionTitle: buildSubmissionTitle(submission.review_type, submission.checkpoint, submission.file_name),
         questionType: mapSubmissionReviewType(typeof submission.review_type === 'string' ? submission.review_type : null),
-        studentAnswer: submission.file_name ? `已提交文件：${String(submission.file_name)}` : '已提交作答',
+        studentAnswer: submission.file_name ? '\u5df2\u63d0\u4ea4\u6587\u4ef6\uff1a' : '\u5df2\u63d0\u4ea4\u4f5c\u7b54',
         submittedAt: String(submission.created_at ?? new Date().toISOString()),
         status: submission.graded ? 'reviewed' : 'pending',
         score: submission.score === null || submission.score === undefined ? undefined : Number(submission.score),
@@ -905,6 +916,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
           progress: Number(course.progress ?? 0),
           status: ((course.status as 'in_progress' | 'completed' | 'failed') ?? 'in_progress'),
         })),
+        checkpoints: (data.checkpoints ?? []).map((c) => ({ name: c.name, hasData: c.hasData })),
         teamTeachers: (data.teamTeachers ?? []).map((item) => ({
           id: String(item.id),
           name: String(item.name ?? ''),
@@ -981,9 +993,8 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       set((s) => ({ notesMap: { ...s.notesMap, [contactId]: notes } }))
     }
   },
-  // ── 学生刷题分配 ──
   studentPracticeAssignments: {},
-  setStudentPracticeAssignment: (studentId, checkpointId, questionIds) =>
+  setStudentPracticeAssignment: (studentId, checkpointId, questionIds) => {
     set((s) => ({
       studentPracticeAssignments: {
         ...s.studentPracticeAssignments,
@@ -992,17 +1003,20 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
           [checkpointId]: questionIds,
         },
       },
-    })),
-  // ── 学生每天自定义备注 ──
+    }))
+  },
   studentDayNotes: {},
-  setStudentDayNote: (studentId, day, note) =>
+  setStudentDayNote: (studentId, day, note) => {
     set((s) => ({
       studentDayNotes: {
         ...s.studentDayNotes,
-        [studentId]: { ...(s.studentDayNotes[studentId] ?? {}), [day]: note },
+        [studentId]: {
+          ...(s.studentDayNotes[studentId] ?? {}),
+          [day]: note,
+        },
       },
-    })),
-  // ── 投诉 ──
+    }))
+  },
   complaintsMap: {},
   loadComplaints: async () => {
     const data = await api.get<Array<Record<string, unknown>>>('/api/teacher/complaints')
@@ -1037,26 +1051,32 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       },
     }))
   },
-  // ── 私聊 ──
   privateSessions: [],
   privateMsgMap: {},
   selectedPmId: null,
-  openPrivateChat: (session) => set((s) => {
-    const exists = s.privateSessions.some((p) => p.id === session.id)
-    return {
-      privateSessions: exists ? s.privateSessions : [...s.privateSessions, session],
-      selectedPmId: session.id,
-      selectedContactId: null,
-      rightTab: 'chat',
-    }
-  }),
+  openPrivateChat: (session) => set((s) => ({
+    privateSessions: s.privateSessions.some((item) => item.id === session.id)
+      ? s.privateSessions.map((item) => item.id === session.id ? { ...item } : item)
+      : [{ ...session }, ...s.privateSessions],
+    selectedPmId: session.id,
+  })),
   closePrivateChatNav: () => set({ selectedPmId: null }),
   sendPrivateChatMsg: (pmId, msg) => set((s) => {
-    const updated = [...(s.privateMsgMap[pmId] ?? []), msg]
-    const sessions = s.privateSessions.map((p) =>
-      p.id === pmId ? { ...p, lastMsg: msg.text, lastTime: msg.time } : p,
+    const currentMessages = s.privateMsgMap[pmId] ?? []
+    const nextMessages = [...currentMessages, msg]
+    const nextSessions = s.privateSessions.map((item) =>
+      item.id === pmId
+        ? { ...item, lastMsg: msg.text, lastTime: msg.time }
+        : item,
     )
-    return { privateMsgMap: { ...s.privateMsgMap, [pmId]: updated }, privateSessions: sessions }
+
+    return {
+      privateMsgMap: {
+        ...s.privateMsgMap,
+        [pmId]: nextMessages,
+      },
+      privateSessions: nextSessions,
+      selectedPmId: pmId,
+    }
   }),
 }))
-

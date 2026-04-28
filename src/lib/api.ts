@@ -18,7 +18,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const contentType = res.headers.get('content-type') || ''
 
   if (contentType.includes('text/html') || text.trim().startsWith('<')) {
-    throw new Error(`接口返回了网页，请确认后端服务 http://localhost:3000 已启动，且前端 dev 服务已重启：${path}`)
+    throw new Error(`接口返回了网页，请确认后端服务 https://apix.1v1.buzhi.com 可访问，且前端 dev 服务已重启：${path}`)
   }
 
   const data = text ? JSON.parse(text) : null
@@ -49,10 +49,10 @@ async function requestForm<T>(method: string, path: string, body: FormData): Pro
 }
 
 export const api = {
-  get:    <T>(path: string)                  => request<T>('GET',    path),
-  post:   <T>(path: string, body: unknown)   => request<T>('POST',   path, body),
+  get:    <T>(path: string)                  => request<T>('GET', path),
+  post:   <T>(path: string, body: unknown)   => request<T>('POST', path, body),
   postForm: <T>(path: string, body: FormData) => requestForm<T>('POST', path, body),
-  put:    <T>(path: string, body: unknown)   => request<T>('PUT',    path, body),
-  patch:  <T>(path: string, body: unknown)   => request<T>('PATCH',  path, body),
+  put:    <T>(path: string, body: unknown)   => request<T>('PUT', path, body),
+  patch:  <T>(path: string, body: unknown)   => request<T>('PATCH', path, body),
   delete: <T>(path: string)                  => request<T>('DELETE', path),
 }

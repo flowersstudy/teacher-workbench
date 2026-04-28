@@ -4,6 +4,7 @@ import { TaskModal } from './components/LeftPanel/TaskModal'
 import { ReviewModal } from './components/LeftPanel/ReviewModal'
 import { AbnormalModal } from './components/LeftPanel/AbnormalModal'
 import { AssignStudentModal } from './components/LeftPanel/AssignStudentModal'
+import { LiveDrillModal } from './components/LeftPanel/LiveDrillModal'
 import { UploadLinkModal } from './components/LeftPanel/UploadLinkModal'
 import { UploadHandoutModal } from './components/LeftPanel/UploadHandoutModal'
 import { UploadReplayModal } from './components/LeftPanel/UploadReplayModal'
@@ -54,6 +55,7 @@ export function TeacherWorkbench({ onLogout }: { onLogout?: () => void }) {
       <ReviewModal />
       <AbnormalModal />
       <AssignStudentModal />
+      <LiveDrillModal />
       <UploadLinkModal />
       <UploadHandoutModal />
       <UploadReplayModal />

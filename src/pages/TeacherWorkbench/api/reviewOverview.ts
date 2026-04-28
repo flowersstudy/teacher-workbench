@@ -15,7 +15,7 @@ export interface ReviewPointRate {
   updatedAt?: string
 }
 
-export type ReviewPointStatusValue = 'learning' | 'completed' | 'pending' | 'locked'
+export type ReviewPointStatusValue = 'learning' | 'completed' | 'pending' | 'assigned' | 'locked'
 
 export interface ReviewPointStatus {
   pointId: number | null

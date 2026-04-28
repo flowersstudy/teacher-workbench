@@ -35,7 +35,6 @@ type KnowledgeGroup = {
   desc: string
 }
 
-// Per-checkpoint configuration state
 type CheckpointConfig = {
   checkpointName: string
   selectedVersion: VersionKey | null
@@ -47,6 +46,13 @@ type CheckpointConfig = {
 }
 
 const palette = ['#e8845a', '#4a90d9', '#7c3aed', '#16a34a', '#d79c69', '#b58f6f']
+const NO_ASSIGN_TEACHER: TeacherOption = {
+  id: 'unassigned',
+  name: '不分配',
+  role: 'coach',
+  roleLabel: '暂不设置带教老师',
+  color: '#94a3b8',
+}
 
 const PROVINCE_CANDIDATES = [
   '国考', '北京', '天津', '河北', '山西', '内蒙古', '辽宁', '吉林', '黑龙江',
@@ -135,6 +141,14 @@ function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
 }
 
+function inferTeacherRoleFromTitle(title?: string) {
+  const value = String(title || '').trim().toLowerCase()
+  if (value.includes('诊断') || value.includes('diagnosis')) return 'diagnosis'
+  if (value.includes('校长') || value.includes('principal')) return 'principal'
+  if (value.includes('学管') || value.includes('manager')) return 'manager'
+  return 'coach'
+}
+
 function inferProvinceKeys(...texts: Array<string | undefined>) {
   const merged = texts.filter(Boolean).join(' ')
   if (!merged) return []
@@ -175,12 +189,47 @@ function makeDefaultConfig(checkpointName: string): CheckpointConfig {
   }
 }
 
-function isConfigComplete(cfg: CheckpointConfig, library: AssignmentCheckpointLibrary | null): boolean {
-  if (!cfg.selectedVersion || !cfg.selectedProvince) return false
+function getConfigValidationIssues(cfg: CheckpointConfig, library: AssignmentCheckpointLibrary | null): string[] {
+  const issues: string[] = []
+
+  if (!cfg.selectedVersion) {
+    issues.push('请选择版本')
+  }
+
+  if (!cfg.selectedProvince) {
+    issues.push('请选择省份')
+  }
+
   const showTheory = cfg.selectedVersion !== 'express' && cfg.selectedVersion !== 'premium'
-  if (showTheory && library && library.theoryRows.length > 0 && cfg.selectedKnowledgeIds.length === 0) return false
-  if (library && library.practiceItems.length > 0 && cfg.selectedQuestionIds.length === 0) return false
-  return true
+  if (showTheory && library && library.theoryRows.length > 0 && cfg.selectedKnowledgeIds.length === 0) {
+    issues.push('请至少选择 1 个知识点')
+  }
+
+  if (!library || !cfg.selectedProvince) {
+    return issues
+  }
+
+  const availablePracticeItems = library.practiceItems.filter((item) =>
+    matchesProvince(getResourceProvinceKeys(item), cfg.selectedProvince),
+  )
+  if (availablePracticeItems.length < 3) {
+    issues.push(`当前省份可用实训题只有 ${availablePracticeItems.length} 道，至少需要 3 道`)
+  } else if (cfg.selectedQuestionIds.length > 0 && cfg.selectedQuestionIds.length !== 3) {
+    issues.push('实训题需要恰好选择 3 道')
+  }
+
+  const availableExamItems = library.examItems.filter((item) =>
+    matchesProvince(getResourceProvinceKeys(item), cfg.selectedProvince),
+  )
+  if (availableExamItems.length < 1) {
+    issues.push('当前省份没有可用测试题，至少需要 1 道')
+  }
+
+  return issues
+}
+
+function isConfigComplete(cfg: CheckpointConfig, library: AssignmentCheckpointLibrary | null): boolean {
+  return getConfigValidationIssues(cfg, library).length === 0
 }
 
 function SelectCard({
@@ -325,8 +374,7 @@ function EmptyState({ text }: { text: string }) {
 }
 
 export function AssignStudentModal() {
-  const { assignStudentItem, closeAssignStudent, assignStudentTask } =
-    useWorkbenchStore()
+  const { assignStudentItem, closeAssignStudent, assignStudentTask, studentDetailMetaMap } = useWorkbenchStore()
   const assignStudentModalOpen = assignStudentItem !== null
   const assignStudentModalItemId = assignStudentItem?.id ?? null
   const closeAssignStudentModal = closeAssignStudent
@@ -336,15 +384,71 @@ export function AssignStudentModal() {
   const [checkpointConfigs, setCheckpointConfigs] = useState<Map<string, CheckpointConfig>>(new Map())
   const [selectedTeacher, setSelectedTeacher] = useState<TeacherOption | null>(null)
   const [teachers, setTeachers] = useState<TeacherOption[]>([])
+  const [teacherInitializedForOpen, setTeacherInitializedForOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<RightTab>('version')
   const [submitting, setSubmitting] = useState(false)
+  const [confirmArmed, setConfirmArmed] = useState(false)
+
+  const preferredTeacherId = useMemo(() => {
+    const itemTeacherId = String(assignStudentItem?.preferredTeacherId || '').trim()
+    if (itemTeacherId) return itemTeacherId
+
+    const studentId = String(assignStudentItem?.studentId || '').trim()
+    if (!studentId) return ''
+
+    const detailMeta = studentDetailMetaMap[studentId]
+    const coach = (detailMeta?.teamTeachers ?? []).find((teacher) => {
+      const role = String(teacher.role || '').trim()
+      return role === 'coach' || role.includes('带教')
+    })
+
+    return coach?.id ? String(coach.id) : ''
+  }, [assignStudentItem?.preferredTeacherId, assignStudentItem?.studentId, studentDetailMetaMap])
 
   useEffect(() => {
     if (!assignStudentModalOpen) return
-    api.get<{ list: TeacherOption[] }>('/api/teacher/list').then((res) => {
-      const list = (res.list ?? []).map((t, i) => ({ ...t, color: palette[i % palette.length] }))
-      setTeachers(list)
-    }).catch(() => {})
+    let cancelled = false
+
+    async function loadTeachers() {
+      try {
+        const directList = await api.get<TeacherOption[]>('/api/teacher/assignable-teachers')
+        if (cancelled) return
+
+        const list = (Array.isArray(directList) ? directList : [])
+          .map((teacher, index) => ({
+            ...teacher,
+            role: teacher.role || inferTeacherRoleFromTitle(teacher.title),
+            color: teacher.color || palette[index % palette.length],
+          }))
+          .filter((teacher) => teacher.role === 'coach')
+
+        setTeachers([NO_ASSIGN_TEACHER, ...list])
+        return
+      } catch {}
+
+      try {
+        const res = await api.get<{ list: TeacherOption[] }>('/api/teacher/list')
+        if (cancelled) return
+
+        const list = (res.list ?? [])
+          .map((teacher, index) => ({
+            ...teacher,
+            role: teacher.role || inferTeacherRoleFromTitle(teacher.title),
+            color: teacher.color || palette[index % palette.length],
+          }))
+          .filter((teacher) => teacher.role === 'coach')
+
+        setTeachers([NO_ASSIGN_TEACHER, ...list])
+      } catch {
+        if (!cancelled) setTeachers([NO_ASSIGN_TEACHER])
+      }
+    }
+
+    void loadTeachers()
+
+    return () => {
+      cancelled = true
+    }
   }, [assignStudentModalOpen])
 
   useEffect(() => {
@@ -353,10 +457,41 @@ export function AssignStudentModal() {
       setActiveCheckpointTab(null)
       setCheckpointConfigs(new Map())
       setSelectedTeacher(null)
+      setTeacherInitializedForOpen(false)
       setActiveTab('version')
       setSubmitting(false)
+      setConfirmArmed(false)
     }
   }, [assignStudentModalOpen])
+
+  useEffect(() => {
+    if (!assignStudentModalOpen || teacherInitializedForOpen || teachers.length === 0) return
+
+    const preferredTeacher = preferredTeacherId
+      ? (teachers.find((teacher) => String(teacher.id) === preferredTeacherId) ?? null)
+      : null
+
+    setSelectedTeacher(preferredTeacher ?? NO_ASSIGN_TEACHER)
+    setTeacherInitializedForOpen(true)
+  }, [assignStudentModalOpen, preferredTeacherId, teacherInitializedForOpen, teachers])
+
+  useEffect(() => {
+    if (!assignStudentModalOpen) return
+    if (selectedCheckpoints.length > 0) return
+
+    const presetCheckpoints = (assignStudentItem?.presetCheckpoints ?? []).filter(Boolean)
+    if (presetCheckpoints.length === 0) return
+
+    const nextConfigs = new Map<string, CheckpointConfig>()
+    presetCheckpoints.forEach((name) => {
+      nextConfigs.set(name, makeDefaultConfig(name))
+    })
+
+    setSelectedCheckpoints(presetCheckpoints)
+    setCheckpointConfigs(nextConfigs)
+    setActiveCheckpointTab(presetCheckpoints[0] ?? null)
+    setActiveTab('version')
+  }, [assignStudentItem?.presetCheckpoints, assignStudentModalOpen, selectedCheckpoints.length])
 
   useEffect(() => {
     if (selectedCheckpoints.length === 0) {
@@ -367,6 +502,10 @@ export function AssignStudentModal() {
       setActiveCheckpointTab(selectedCheckpoints[0])
     }
   }, [selectedCheckpoints, activeCheckpointTab])
+
+  useEffect(() => {
+    setConfirmArmed(false)
+  }, [selectedCheckpoints, checkpointConfigs, selectedTeacher])
 
   const handleTabSwitch = (name: string) => {
     setActiveCheckpointTab(name)
@@ -393,6 +532,21 @@ export function AssignStudentModal() {
         return m
       })
       return [...prev, name]
+    })
+  }
+
+  const moveCheckpoint = (name: string, direction: 'up' | 'down') => {
+    setSelectedCheckpoints((prev) => {
+      const index = prev.indexOf(name)
+      if (index < 0) return prev
+
+      const targetIndex = direction === 'up' ? index - 1 : index + 1
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev
+
+      const next = [...prev]
+      const [item] = next.splice(index, 1)
+      next.splice(targetIndex, 0, item)
+      return next
     })
   }
 
@@ -447,6 +601,13 @@ export function AssignStudentModal() {
     )
   }, [currentLibrary, currentConfig?.selectedProvince])
 
+  const filteredExam = useMemo(() => {
+    if (!currentLibrary || !currentConfig?.selectedProvince) return []
+    return currentLibrary.examItems.filter((r) =>
+      matchesProvince(getResourceProvinceKeys(r), currentConfig!.selectedProvince),
+    )
+  }, [currentLibrary, currentConfig?.selectedProvince])
+
   const filteredRemedial = useMemo(() => {
     if (!currentLibrary || !currentConfig?.selectedProvince) return []
     return currentLibrary.remedialItems.filter((r) =>
@@ -456,7 +617,6 @@ export function AssignStudentModal() {
 
   const canConfirm =
     selectedCheckpoints.length > 0 &&
-    selectedTeacher !== null &&
     selectedCheckpoints.every((name) => {
       const cfg = checkpointConfigs.get(name)
       if (!cfg) return false
@@ -464,11 +624,22 @@ export function AssignStudentModal() {
       return isConfigComplete(cfg, lib)
     })
 
+  const validationMessages = selectedCheckpoints.flatMap((name) => {
+    const cfg = checkpointConfigs.get(name)
+    const lib = CHECKPOINT_ASSIGNMENT_LIBRARY.find((l) => l.checkpointName === name) ?? null
+    const issues = cfg ? getConfigValidationIssues(cfg, lib) : ['请完成当前卡点配置']
+    return issues.map((issue) => `${name}：${issue}`)
+  })
+
   const handleSubmit = async () => {
-    if (!canConfirm || !selectedTeacher || submitting || !assignStudentModalItemId) return
+    if (!canConfirm || submitting || !assignStudentModalItemId) return
+    if (!confirmArmed) {
+      setConfirmArmed(true)
+      return
+    }
     setSubmitting(true)
     try {
-      for (const name of selectedCheckpoints) {
+      for (const [sortOrder, name] of selectedCheckpoints.entries()) {
         const cfg = checkpointConfigs.get(name)
         if (!cfg) continue
         const lib = CHECKPOINT_ASSIGNMENT_LIBRARY.find((l) => l.checkpointName === name)
@@ -496,36 +667,61 @@ export function AssignStudentModal() {
           return Array.from(m.values())
         })()
         const selectedGroups = libKnowledgeGroups.filter((g) => cfg.selectedKnowledgeIds.includes(g.key))
+        const selectedTheoryRows = lib.theoryRows.filter((row) => (
+          cfg.selectedKnowledgeIds.includes(row.knowledgePoint || row.theoryTitle)
+          && matchesProvince(getTheoryProvinceKeys(row), cfg.selectedProvince)
+        ))
+        const availablePracticeItems = lib.practiceItems.filter((item) =>
+          matchesProvince(getResourceProvinceKeys(item), cfg.selectedProvince),
+        )
+        const availableExamItems = lib.examItems.filter((item) =>
+          matchesProvince(getResourceProvinceKeys(item), cfg.selectedProvince),
+        )
         const theoryLessons: Array<{
-          id: string; title: string; scope: string; videoId: string
-          preClassUrl: string; analysisUrl: string; noteText: string
-          knowledgeId: string; knowledgeTitle: string; knowledgeType: string
+          id: string
+          title: string
+          scope: string
+          videoId: string
+          preClassUrl: string
+          analysisUrl: string
+          noteText: string
+          knowledgeId: string
+          knowledgeTitle: string
+          knowledgeType: string
+          sourceSheet: string
+          sourceRow: number
         }> = []
-        selectedGroups.forEach((g) => {
-          g.rows.forEach((r) => {
-            theoryLessons.push({
-              id: buildTheoryId(r),
-              title: r.theoryTitle,
-              scope: r.learningStatusRaw || '',
-              videoId: r.videoId || '',
-              preClassUrl: r.preClassUrl || '',
-              analysisUrl: r.analysisUrl || '',
-              noteText: r.noteText || '',
-              knowledgeId: g.key,
-              knowledgeTitle: g.title,
-              knowledgeType: g.knowledgeType,
-            })
+        selectedTheoryRows.forEach((row) => {
+          const matchedGroup = libKnowledgeGroups.find((group) => group.key === (row.knowledgePoint || row.theoryTitle))
+          theoryLessons.push({
+            id: buildTheoryId(row),
+            title: row.theoryTitle,
+            scope: row.learningStatusRaw || '',
+            videoId: row.videoId || '',
+            preClassUrl: row.preClassUrl || '',
+            analysisUrl: row.analysisUrl || '',
+            noteText: row.noteText || '',
+            knowledgeId: matchedGroup?.key || row.knowledgePoint || row.theoryTitle,
+            knowledgeTitle: matchedGroup?.title || row.knowledgePoint || row.theoryTitle,
+            knowledgeType: matchedGroup?.knowledgeType || getKnowledgeType(row),
+            sourceSheet: row.sourceSheet,
+            sourceRow: row.sourceRow,
           })
         })
-        const practiceItems = lib.practiceItems.filter((r) => cfg.selectedQuestionIds.includes(r.id))
-        const examItems = lib.examItems.filter((r) => cfg.selectedExamIds.includes(r.id))
+        const selectedPracticeItems = availablePracticeItems.filter((item) => cfg.selectedQuestionIds.includes(item.id))
+        const fallbackPracticeItems = availablePracticeItems.filter((item) => !cfg.selectedQuestionIds.includes(item.id))
+        const practiceItems = [...selectedPracticeItems, ...fallbackPracticeItems].slice(0, 3)
+        const examItems = cfg.selectedExamIds.length > 0
+          ? availableExamItems.filter((item) => cfg.selectedExamIds.includes(item.id)).slice(0, 1)
+          : availableExamItems.slice(0, 1)
         const remedialItems = lib.remedialItems.filter((r) => cfg.selectedRemedialIds.includes(r.id))
         const knowledgeItems = selectedGroups.map((g) => ({
           id: g.key, title: g.title, type: g.knowledgeType, desc: g.desc,
         }))
         await assignStudentTask(assignStudentModalItemId, {
           checkpointName: name,
-          teacher: selectedTeacher,
+          sortOrder,
+          teacher: selectedTeacher?.id === NO_ASSIGN_TEACHER.id ? null : selectedTeacher,
           version: cfg.selectedVersion!,
           versionName: versionObj?.name ?? cfg.selectedVersion!,
           province: cfg.selectedProvince!,
@@ -541,6 +737,9 @@ export function AssignStudentModal() {
         })
       }
       closeAssignStudentModal()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '分配失败，请稍后重试'
+      alert(message || '分配失败，请稍后重试')
     } finally {
       setSubmitting(false)
     }
@@ -552,7 +751,7 @@ export function AssignStudentModal() {
     { key: 'version', label: '版本' },
     { key: 'province', label: '省份' },
     ...(showTheory ? [{ key: 'course' as RightTab, label: '知识点' }] : []),
-    { key: 'question', label: '刷题' },
+    { key: 'question', label: '实训+测试' },
     { key: 'exam', label: '补考' },
   ]
 
@@ -561,7 +760,12 @@ export function AssignStudentModal() {
     if (key === 'version') return !!currentConfig.selectedVersion
     if (key === 'province') return !!currentConfig.selectedProvince
     if (key === 'course') return currentConfig.selectedKnowledgeIds.length > 0
-    if (key === 'question') return currentConfig.selectedQuestionIds.length > 0
+    if (key === 'question') {
+      if (!currentLibrary || !currentConfig.selectedProvince) return false
+      const practiceReady = currentLibrary.practiceItems.length === 0 || filteredPractice.length >= 3
+      const examReady = currentLibrary.examItems.length === 0 || filteredExam.length >= 1
+      return practiceReady && examReady
+    }
     if (key === 'exam') return currentConfig.selectedRemedialIds.length > 0
     return false
   }
@@ -569,7 +773,6 @@ export function AssignStudentModal() {
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="relative flex h-[88vh] w-[900px] max-w-[96vw] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-        {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-[var(--color-border)] px-6 py-4">
           <div>
             <h2 className="text-base font-semibold text-[var(--color-text-primary)]">分配学员任务</h2>
@@ -586,9 +789,7 @@ export function AssignStudentModal() {
           </button>
         </div>
 
-        {/* Body */}
         <div className="flex min-h-0 flex-1">
-          {/* Left panel */}
           <div className="flex w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-[var(--color-border)] p-4">
             <div>
               <div className="mb-2 text-xs font-semibold text-[var(--color-text-muted)]">选择卡点（可多选）</div>
@@ -607,6 +808,9 @@ export function AssignStudentModal() {
             </div>
             <div>
               <div className="mb-2 text-xs font-semibold text-[var(--color-text-muted)]">选择带教老师</div>
+              <div className="mb-2 text-[11px] leading-5 text-[var(--color-text-muted)]">
+                这里设置的是该学生的全局带教老师，修改后会同步作用到这个学生的所有卡点。
+              </div>
               <div className="flex flex-col gap-2">
                 {teachers.length === 0 ? (
                   <EmptyState text="暂无老师数据" />
@@ -618,14 +822,14 @@ export function AssignStudentModal() {
                       title={t.name}
                       subtitle={t.roleLabel ?? t.role ?? t.title}
                       onClick={() => setSelectedTeacher(t)}
-                      extra={
+                      extra={(
                         <div
                           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                           style={{ background: t.color ?? '#e8845a' }}
                         >
                           {t.name.slice(0, 1)}
                         </div>
-                      }
+                      )}
                     />
                   ))
                 )}
@@ -633,7 +837,6 @@ export function AssignStudentModal() {
             </div>
           </div>
 
-          {/* Right panel */}
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             {selectedCheckpoints.length === 0 ? (
               <div className="flex flex-1 items-center justify-center text-sm text-[var(--color-text-muted)]">
@@ -641,7 +844,43 @@ export function AssignStudentModal() {
               </div>
             ) : (
               <>
-                {/* Checkpoint tab switcher */}
+                {selectedCheckpoints.length > 1 && (
+                  <div className="shrink-0 border-b border-[var(--color-border)] px-5 py-3">
+                    <div className="mb-2 text-xs font-semibold text-[var(--color-text-muted)]">学习顺序</div>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedCheckpoints.map((name, index) => (
+                        <div
+                          key={`sort_${name}`}
+                          className="flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-text-secondary)]"
+                        >
+                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-bg-left)] text-[10px] font-semibold">
+                            {index + 1}
+                          </span>
+                          <span>{name}</span>
+                          <div className="ml-1 flex items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={index === 0}
+                              onClick={() => moveCheckpoint(name, 'up')}
+                              className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              disabled={index === selectedCheckpoints.length - 1}
+                              onClick={() => moveCheckpoint(name, 'down')}
+                              className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              ↓
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {selectedCheckpoints.length > 1 && (
                   <div className="flex shrink-0 flex-wrap gap-2 border-b border-[var(--color-border)] px-5 py-3">
                     {selectedCheckpoints.map((name) => {
@@ -671,7 +910,6 @@ export function AssignStudentModal() {
                   </div>
                 )}
 
-                {/* Step nav */}
                 <div className="flex shrink-0 flex-wrap gap-2 border-b border-[var(--color-border)] px-5 py-3">
                   {steps.map((s, i) => (
                     <StepButton
@@ -685,7 +923,6 @@ export function AssignStudentModal() {
                   ))}
                 </div>
 
-                {/* Step content */}
                 <div className="flex-1 overflow-y-auto p-5">
                   {activeTab === 'version' && (
                     <div className="flex flex-col gap-3">
@@ -696,11 +933,11 @@ export function AssignStudentModal() {
                           title={v.name}
                           subtitle={v.period + ' · ' + v.condition}
                           onClick={() => activeCheckpointTab && updateConfig(activeCheckpointTab, { selectedVersion: v.key })}
-                          extra={
+                          extra={(
                             <div className="shrink-0 text-right">
                               <div className="text-xs font-semibold" style={{ color: v.color }}>¥{v.price}</div>
                             </div>
-                          }
+                          )}
                         />
                       ))}
                     </div>
@@ -781,8 +1018,12 @@ export function AssignStudentModal() {
 
                   {activeTab === 'question' && (
                     <div className="flex flex-col gap-2">
+                      <div className="rounded-xl bg-[var(--color-page-bg)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
+                        默认自动带出 3 道实训题和 1 道测试题，也可以手动调整。
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-[var(--color-text-muted)]">实训题（3题）</div>
                       {filteredPractice.length === 0 ? (
-                        <EmptyState text="该卡点暂无刷题资源" />
+                        <EmptyState text="当前卡点暂无实训题资源" />
                       ) : (
                         filteredPractice.map((item) => (
                           <CheckboxRow
@@ -793,10 +1034,33 @@ export function AssignStudentModal() {
                             onToggle={() => {
                               if (!activeCheckpointTab || !currentConfig) return
                               const ids = currentConfig.selectedQuestionIds
+                              if (!ids.includes(item.id) && ids.length >= 3) {
+                                alert('实训固定 3 题，请先取消一题再重新选择')
+                                return
+                              }
                               updateConfig(activeCheckpointTab, {
                                 selectedQuestionIds: ids.includes(item.id)
                                   ? ids.filter((id) => id !== item.id)
                                   : [...ids, item.id],
+                              })
+                            }}
+                          />
+                        ))
+                      )}
+                      <div className="mt-3 text-xs font-semibold text-[var(--color-text-muted)]">测试题（1题）</div>
+                      {filteredExam.length === 0 ? (
+                        <EmptyState text="当前卡点暂无测试题资源" />
+                      ) : (
+                        filteredExam.map((item) => (
+                          <CheckboxRow
+                            key={item.id}
+                            checked={currentConfig?.selectedExamIds.includes(item.id) ?? false}
+                            title={renderResourceTitle(item)}
+                            subtitle={item.slotKey || undefined}
+                            onToggle={() => {
+                              if (!activeCheckpointTab || !currentConfig) return
+                              updateConfig(activeCheckpointTab, {
+                                selectedExamIds: currentConfig.selectedExamIds.includes(item.id) ? [] : [item.id],
                               })
                             }}
                           />
@@ -836,9 +1100,24 @@ export function AssignStudentModal() {
           </div>
         </div>
 
-        {/* Footer */}
         <div className="flex shrink-0 items-center justify-between border-t border-[var(--color-border)] px-6 py-4">
-          <div className="text-xs text-[var(--color-text-muted)]">
+          <div className="max-w-[70%] text-xs">
+            {validationMessages.length > 0 ? (
+              <div className="text-rose-500">
+                {validationMessages[0]}
+                {validationMessages.length > 1 ? `；另外还有 ${validationMessages.length - 1} 项未完成` : ''}
+              </div>
+            ) : confirmArmed ? (
+              <div className="text-amber-600">再次点击“确认分配”后，将立即为学生下发任务并同步带教老师。</div>
+            ) : (
+              <div className="text-[var(--color-text-muted)]">
+                {selectedCheckpoints.length > 0
+                  ? `${selectedCheckpoints.length} 个卡点已选${selectedTeacher ? ` · ${selectedTeacher.name}` : ''}`
+                  : '请选择卡点和老师'}
+              </div>
+            )}
+          </div>
+          <div className="hidden text-xs text-[var(--color-text-muted)]">
             {selectedCheckpoints.length > 0
               ? selectedCheckpoints.length + ' 个卡点已选' + (selectedTeacher ? ' · ' + selectedTeacher.name : '')
               : '请选择卡点和老师'}
@@ -856,12 +1135,15 @@ export function AssignStudentModal() {
               onClick={handleSubmit}
               disabled={!canConfirm || submitting}
               className={[
-                'rounded-xl px-5 py-2 text-sm font-medium text-white transition-all',
+                'relative overflow-hidden rounded-xl px-5 py-2 text-sm font-medium text-transparent transition-all',
                 canConfirm && !submitting
                   ? 'bg-[var(--color-primary)] hover:opacity-90'
                   : 'cursor-not-allowed bg-gray-300',
               ].join(' ')}
             >
+              <span className="absolute inset-0 flex items-center justify-center text-white">
+                {submitting ? '提交中...' : confirmArmed ? '再次确认分配' : '确认分配'}
+              </span>
               {submitting ? '提交中...' : '确认分配'}
             </button>
           </div>

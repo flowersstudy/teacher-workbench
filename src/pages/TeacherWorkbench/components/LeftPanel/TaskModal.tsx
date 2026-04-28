@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom'
+import { useState } from 'react'
 import { taskMeta } from '../../config/taskConfig'
 import { useWorkbenchStore } from '../../store/workbenchStore'
 
@@ -19,12 +20,12 @@ export function TaskModal() {
   const selectContact     = useWorkbenchStore((s) => s.selectContact)
   const openLinkUpload    = useWorkbenchStore((s) => s.openLinkUpload)
   const openHandoutUpload = useWorkbenchStore((s) => s.openHandoutUpload)
-  const openReplayUpload  = useWorkbenchStore((s) => s.openReplayUpload)
   const openStudentProfile  = useWorkbenchStore((s) => s.openStudentProfile)
   const openAssignStudent   = useWorkbenchStore((s) => s.openAssignStudent)
   const taskItemsMap        = useWorkbenchStore((s) => s.taskItemsMap)
+  const [linkTab, setLinkTab] = useState<'live' | 'replay'>('live')
 
-  if (!openTaskKey || openTaskKey === 'pendingReview' || openTaskKey === 'abnormalUser' || openTaskKey === 'pendingFeedback') return null
+  if (!openTaskKey || openTaskKey === 'pendingReview' || openTaskKey === 'abnormalUser' || openTaskKey === 'pendingFeedback' || openTaskKey === 'liveDrill') return null
 
   const title = taskMeta[openTaskKey].label
   const items = taskItemsMap[openTaskKey] || []
@@ -52,30 +53,41 @@ export function TaskModal() {
           </button>
         </div>
 
+        {/* pendingLink 专属 tab */}
+        {openTaskKey === 'pendingLink' && (
+          <div className="flex border-b border-[var(--color-border)] px-4">
+            {(['live', 'replay'] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setLinkTab(tab)}
+                className={[
+                  'mr-4 py-2 text-xs font-semibold border-b-2 transition-colors',
+                  linkTab === tab
+                    ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
+                    : 'border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]',
+                ].join(' ')}
+              >
+                {tab === 'live' ? '直播课' : '录播课'}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="max-h-[calc(80vh-52px)] overflow-auto p-2">
           {openTaskKey === 'pendingLink' ? (
-            // 上课链接 + 分隔线 + 回放链接
-            (['class', 'replay'] as const).map((type, groupIdx) => {
-              const group = items.filter((it) => it.linkType === type)
+            // 按课程类型分3组，同时按 linkTab 过滤
+            (['diagnose', 'consensus', 'correction'] as const).map((ct) => {
+              const group = items.filter((it) => it.courseType === ct && it.linkType === linkTab)
               if (group.length === 0) return null
+              const label = ct === 'diagnose' ? '1v1诊断' : ct === 'consensus' ? '1v1共识' : '1v1纠偏'
               return (
-                <div key={type}>
-                  {groupIdx > 0 && (
-                    <div className="flex items-center gap-2 px-1 py-2">
-                      <div className="h-px flex-1 bg-[var(--color-border)]" />
-                      <span className="text-[10px] text-[var(--color-text-muted)]">
-                        {type === 'replay' ? '回放链接' : '上课链接'}
-                      </span>
-                      <div className="h-px flex-1 bg-[var(--color-border)]" />
-                    </div>
-                  )}
-                  {groupIdx === 0 && (
-                    <div className="flex items-center gap-2 px-1 pb-1.5">
-                      <div className="h-px flex-1 bg-[var(--color-border)]" />
-                      <span className="text-[10px] text-[var(--color-text-muted)]">上课链接</span>
-                      <div className="h-px flex-1 bg-[var(--color-border)]" />
-                    </div>
-                  )}
+                <div key={ct} className="mb-2">
+                  <div className="flex items-center gap-2 px-1 py-2">
+                    <div className="h-px flex-1 bg-[var(--color-border)]" />
+                    <span className="text-[10px] font-semibold text-[var(--color-text-muted)]">{label}</span>
+                    <div className="h-px flex-1 bg-[var(--color-border)]" />
+                  </div>
                   <div className="space-y-1">
                     {group.map((it) => (
                       <div key={it.id} className="flex items-center gap-3 rounded-[var(--radius-card)] px-3 py-2 hover:bg-[var(--color-bg-left)]">
@@ -86,10 +98,7 @@ export function TaskModal() {
                         </div>
                         <button type="button"
                           className="shrink-0 text-xs font-semibold text-[var(--color-primary)] hover:text-[var(--color-primary-dark)]"
-                          onClick={() => {
-                            if (it.linkType === 'class') { close(); openLinkUpload(it) }
-                            else { close(); openReplayUpload(it) }
-                          }}>
+                          onClick={() => { close(); openLinkUpload(it) }}>
                           {it.actionLabel}
                         </button>
                       </div>
@@ -103,13 +112,13 @@ export function TaskModal() {
               {items.map((it) => (
                 <div
                   key={it.id}
-                  role={openTaskKey === 'pendingClass' ? 'button' : undefined}
-                  tabIndex={openTaskKey === 'pendingClass' ? 0 : undefined}
+                  role={openTaskKey === 'pendingClass' && it.studentId ? 'button' : undefined}
+                  tabIndex={openTaskKey === 'pendingClass' && it.studentId ? 0 : undefined}
                   onClick={openTaskKey === 'pendingClass' && it.studentId ? () => { close(); openStudentProfile(it.studentId!) } : undefined}
                   onKeyDown={openTaskKey === 'pendingClass' && it.studentId ? (e) => { if (e.key === 'Enter') { close(); openStudentProfile(it.studentId!) } } : undefined}
                   className={[
                     'flex items-center gap-3 rounded-[var(--radius-card)] px-3 py-2 hover:bg-[var(--color-bg-left)]',
-                    openTaskKey === 'pendingClass' ? 'cursor-pointer' : '',
+                    openTaskKey === 'pendingClass' && it.studentId ? 'cursor-pointer' : '',
                   ].join(' ')}
                 >
                   <ItemAvatar avatar={it.avatar} color={it.color} />
@@ -123,8 +132,6 @@ export function TaskModal() {
                       onClick={() => {
                         if (openTaskKey === 'pendingHandout') {
                           close(); openHandoutUpload(it)
-                        } else if (openTaskKey === 'newStudent' && it.studentId) {
-                          close(); openStudentProfile(it.studentId)
                         } else if (openTaskKey === 'pendingAssign') {
                           close(); openAssignStudent(it)
                         } else {

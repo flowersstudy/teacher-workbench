@@ -2,6 +2,12 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useWorkbenchStore } from '../../store/workbenchStore'
 
+const COURSE_LABEL: Record<string, string> = {
+  diagnose: '1v1诊断',
+  consensus: '1v1共识',
+  correction: '1v1纠偏',
+}
+
 export function UploadLinkModal() {
   const item = useWorkbenchStore((s) => s.linkUploadItem)
   const close = useWorkbenchStore((s) => s.closeLinkUpload)
@@ -15,6 +21,9 @@ export function UploadLinkModal() {
 
   const event = item.eventId ? calendarEvents.find((e) => e.id === item.eventId) : null
   const timeText = event ? `${event.date} ${event.startTime}–${event.endTime}` : item.name
+  const isReplay = item.linkType === 'replay'
+  const courseLabel = item.courseType ? COURSE_LABEL[item.courseType] : ''
+  const typeLabel = isReplay ? '录播课' : '直播课'
 
   function openMeeting() {
     window.location.href = 'wemeet://'
@@ -31,7 +40,9 @@ export function UploadLinkModal() {
 
   function handleSubmit() {
     if (!link.trim() || !item) return
-    if (item.eventId) setEventLink(item.eventId, link.trim())
+    if (item.studentId && item.courseType && item.pointName) {
+      void setEventLink(item.studentId, item.courseType, item.linkType === 'replay' ? 'replay' : 'live', link.trim(), item.pointName)
+    }
     setSubmitted(true)
     setTimeout(() => {
       setSubmitted(false)
@@ -54,7 +65,14 @@ export function UploadLinkModal() {
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
-          <div className="text-sm font-semibold text-[var(--color-text-primary)]">上传链接</div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-[var(--color-text-primary)]">上传链接</span>
+            {courseLabel && (
+              <span className="rounded-full bg-[var(--color-primary-light)] px-2 py-0.5 text-[10px] font-semibold text-[var(--color-primary)]">
+                {courseLabel} · {typeLabel}
+              </span>
+            )}
+          </div>
           <button
             type="button"
             onClick={close}
@@ -90,37 +108,44 @@ export function UploadLinkModal() {
             )}
           </div>
 
-          {/* Step 1: Go to Tencent Meeting */}
-          <div>
-            <div className="mb-1.5 text-xs font-medium text-[var(--color-text-secondary)]">
-              第一步：前往腾讯会议预约本次课程，复制入会链接
+          {/* Step 1: only for live */}
+          {!isReplay && (
+            <div>
+              <div className="mb-1.5 text-xs font-medium text-[var(--color-text-secondary)]">
+                第一步：前往腾讯会议预约本次课程，复制入会链接
+              </div>
+              <button
+                type="button"
+                onClick={openMeeting}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white hover:bg-[var(--color-primary-dark)] transition-colors"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <polyline points="15 3 21 3 21 9" />
+                  <line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
+                打开腾讯会议 App
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={openMeeting}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white hover:bg-[var(--color-primary-dark)] transition-colors"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                <polyline points="15 3 21 3 21 9" />
-                <line x1="10" y1="14" x2="21" y2="3" />
-              </svg>
-              打开腾讯会议 App
-            </button>
-          </div>
+          )}
 
-          {/* Step 2: Paste link */}
+          {/* Paste link */}
           <div>
             <div className="mb-1.5 text-xs font-medium text-[var(--color-text-secondary)]">
-              第二步：将入会链接粘贴到此处，发给学生
+              {isReplay ? '粘贴保利威视频 ID' : '第二步：将入会链接粘贴到此处，发给学生'}
             </div>
             <input
               type="text"
               value={link}
               onChange={(e) => setLink(e.target.value)}
-              placeholder="粘贴腾讯会议入会链接…"
+              placeholder={isReplay ? '粘贴保利威视频 ID，如 1e6eaa05af…_1' : '粘贴腾讯会议链接或会议号…'}
               className="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs outline-none focus:border-[var(--color-primary)] transition-colors"
             />
+            {isReplay && (
+              <div className="mt-1 text-[10px] text-[var(--color-text-muted)]">
+                在保利威后台上传视频后，复制视频 ID 粘贴到此处
+              </div>
+            )}
           </div>
 
           {/* Submit */}

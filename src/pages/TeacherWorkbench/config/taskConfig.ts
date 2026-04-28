@@ -11,7 +11,7 @@ export const taskMeta: Record<
   pendingLeave: { label: '请假审批', badgeTone: 'alert' },
   pendingAssign: { label: '待分配学员' },
   pendingLink: { label: '待上传链接' },
-  newStudent: { label: '新增学生' },
+  liveDrill: { label: '直播刷题' },
   pendingHandout: { label: '待上传讲义' },
   pendingFeedback: { label: '学生反馈' },
 }

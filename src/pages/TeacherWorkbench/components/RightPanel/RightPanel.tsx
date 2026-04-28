@@ -7,6 +7,7 @@ import { DataDashboardView } from './DataDashboardView'
 import { InspireBar } from './InspireBar'
 import { MailboxView } from './MailboxView'
 import { StudentsView } from './StudentsView'
+import { TeacherScheduleBoard } from './TeacherScheduleBoard'
 
 function DisabledFeature({ name }: { name: string }) {
   return (
@@ -88,7 +89,7 @@ export function RightPanel() {
         ) : rightTab === 'scheduling' && ENABLE_SCHEDULING_TAB ? (
           <div className="flex h-full flex-col overflow-hidden rounded-[var(--radius-card)]">
             <div className="flex-1 overflow-hidden">
-              <CalendarView />
+              <TeacherScheduleBoard />
             </div>
             <InspireBar />
           </div>

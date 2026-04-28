@@ -5,10 +5,13 @@ import { useWorkbenchStore } from '../../store/workbenchStore'
 export function UploadHandoutModal() {
   const item = useWorkbenchStore((s) => s.handoutUploadItem)
   const close = useWorkbenchStore((s) => s.closeHandoutUpload)
+  const uploadHandoutMaterial = useWorkbenchStore((s) => s.uploadHandoutMaterial)
 
   const [file, setFile] = useState<File | null>(null)
   const [dragging, setDragging] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   if (!item) return null
@@ -24,14 +27,23 @@ export function UploadHandoutModal() {
     if (f) handleFile(f)
   }
 
-  function handleSubmit() {
-    if (!file) return
-    setSubmitted(true)
-    setTimeout(() => {
-      setSubmitted(false)
-      setFile(null)
-      close()
-    }, 1200)
+  async function handleSubmit() {
+    if (!file || !item) return
+    setUploading(true)
+    setUploadError('')
+    try {
+      await uploadHandoutMaterial(String(item.taskRowId ?? ''), file)
+      setSubmitted(true)
+      setTimeout(() => {
+        setSubmitted(false)
+        setFile(null)
+        close()
+      }, 1200)
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : '上传失败，请重试')
+    } finally {
+      setUploading(false)
+    }
   }
 
   function handleClose() {
@@ -136,10 +148,13 @@ export function UploadHandoutModal() {
           </div>
 
           {/* Submit */}
+          {!!uploadError && (
+            <div className="text-[10px] text-red-500">{uploadError}</div>
+          )}
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={!file || !isValidType || submitted}
+            disabled={!file || !isValidType || submitted || uploading}
             className={[
               'w-full rounded-lg py-2 text-sm font-semibold transition-colors',
               submitted
@@ -149,7 +164,7 @@ export function UploadHandoutModal() {
                   : 'cursor-not-allowed bg-gray-100 text-gray-400',
             ].join(' ')}
           >
-            {submitted ? '上传成功 ✓' : '确认上传'}
+            {submitted ? '上传成功 ✓' : uploading ? '上传中…' : '确认上传'}
           </button>
         </div>
       </div>

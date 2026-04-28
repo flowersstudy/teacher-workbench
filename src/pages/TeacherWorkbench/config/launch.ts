@@ -12,7 +12,7 @@ export const ENABLED_TASK_KEYS = [
   'pendingLeave',
   'pendingAssign',
   'pendingLink',
-  'newStudent',
+  'liveDrill',
   'pendingHandout',
   'pendingFeedback',
 ] as const

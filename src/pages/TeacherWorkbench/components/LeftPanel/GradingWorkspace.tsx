@@ -4,7 +4,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { ReviewItem } from '../../api/submissions'
-import { fetchSubmissionPdfBlob, uploadReviewedSubmissionPdf } from '../../api/submissions'
+import { fetchSubmissionFileBlob, getSubmissionFileKind, uploadReviewedSubmissionPdf } from '../../api/submissions'
 import { api } from '../../../../lib/api'
 
 // ── pdfjs worker ──────────────────────────────────────────────────────────────
@@ -85,6 +85,10 @@ function hasAnyAnnotations(pages: Record<number, PageAnnotationState>) {
   return Object.values(pages).some((page) => page.strokes.length > 0 || page.textAnns.length > 0)
 }
 
+function clonePdfBytes(bytes: ArrayBuffer) {
+  return bytes.slice(0)
+}
+
 async function exportAnnotatedPdfFile({
   originalBytes,
   pages,
@@ -100,7 +104,7 @@ async function exportAnnotatedPdfFile({
     return null
   }
 
-  const pdfDoc = await PDFDocument.load(originalBytes.slice(0))
+  const pdfDoc = await PDFDocument.load(clonePdfBytes(originalBytes))
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
 
   for (const [pageKey, pageState] of Object.entries(pages)) {
@@ -496,6 +500,7 @@ const StudentPdfPanel = forwardRef<StudentPdfPanelHandle, { item: ReviewItem }>(
   const [totalPages, setTotalPages] = useState(0)
   const [pdfLoading, setPdfLoading] = useState(true)
   const [pdfError, setPdfError]     = useState('')
+  const [previewKind, setPreviewKind] = useState<'pdf' | 'image' | 'other'>('pdf')
   const [tool, setTool]     = useState<Tool>('pointer')
   const [color, setColor]   = useState(COLORS[0])
   const [width, setWidth]   = useState(WIDTHS[1])
@@ -508,6 +513,7 @@ const StudentPdfPanel = forwardRef<StudentPdfPanelHandle, { item: ReviewItem }>(
   const textInputRef = useRef<HTMLInputElement>(null)
   const isDrawing    = useRef(false)
   const blobUrlRef   = useRef<string>('')
+  const imageUrlRef  = useRef<string>('')
   const originalPdfBytesRef = useRef<ArrayBuffer | null>(null)
   const annotationMapRef = useRef<Record<number, PageAnnotationState>>({})
   const renderSizeMapRef = useRef<Record<number, { width: number; height: number }>>({})
@@ -515,22 +521,45 @@ const StudentPdfPanel = forwardRef<StudentPdfPanelHandle, { item: ReviewItem }>(
   useEffect(() => {
     let cancelled = false
     setPdfLoading(true); setPdfError('')
-    fetchSubmissionPdfBlob(item.id)
+    setPdfDoc(null)
+    setTotalPages(0)
+    setPdfPage(1)
+    setPreviewKind('pdf')
+    originalPdfBytesRef.current = null
+    fetchSubmissionFileBlob(item.id)
       .then(async (blob) => {
         const url = URL.createObjectURL(blob)
         if (cancelled) { URL.revokeObjectURL(url); return }
         blobUrlRef.current = url
-        originalPdfBytesRef.current = await blob.arrayBuffer()
         annotationMapRef.current = {}
         renderSizeMapRef.current = {}
-        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(originalPdfBytesRef.current.slice(0)) }).promise
-        if (cancelled) return
-        setPdfDoc(doc); setTotalPages(doc.numPages); setPdfPage(1)
+        const nextPreviewKind = getSubmissionFileKind(item.fileName, blob.type)
+        setPreviewKind(nextPreviewKind)
+
+        if (nextPreviewKind === 'pdf') {
+          const sourceBytes = await blob.arrayBuffer()
+          originalPdfBytesRef.current = clonePdfBytes(sourceBytes)
+          const doc = await pdfjsLib.getDocument({ data: new Uint8Array(sourceBytes) }).promise
+          if (cancelled) return
+          setPdfDoc(doc); setTotalPages(doc.numPages); setPdfPage(1)
+          return
+        }
+
+        if (nextPreviewKind === 'image') {
+          imageUrlRef.current = url
+          return
+        }
+
+        setPdfError('褰撳墠鎻愪氦鏂囦欢鏆備笉鏀寔棰勮')
       })
       .catch(() => { if (!cancelled) setPdfError('无法加载学生提交文件') })
       .finally(() => { if (!cancelled) setPdfLoading(false) })
-    return () => { cancelled = true; if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = '' } }
-  }, [item.id])
+    return () => {
+      cancelled = true
+      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = '' }
+      imageUrlRef.current = ''
+    }
+  }, [item.fileName, item.id])
 
   useEffect(() => {
     if (!pdfDoc) return; let cancelled = false
@@ -560,12 +589,14 @@ const StudentPdfPanel = forwardRef<StudentPdfPanelHandle, { item: ReviewItem }>(
 
   useImperativeHandle(ref, () => ({
     hasEdits() {
+      if (previewKind !== 'pdf') return false
       return hasAnyAnnotations({
         ...annotationMapRef.current,
         [pdfPage]: { strokes, textAnns },
       })
     },
     async exportReviewedPdfFile() {
+      if (previewKind !== 'pdf') return null
       return exportAnnotatedPdfFile({
         originalBytes: originalPdfBytesRef.current,
         pages: {
@@ -576,7 +607,7 @@ const StudentPdfPanel = forwardRef<StudentPdfPanelHandle, { item: ReviewItem }>(
         fallbackName: `${item.name || 'student-review'}-${item.id}.pdf`,
       })
     },
-  }), [item.id, item.name, pdfPage, strokes, textAnns])
+  }), [item.id, item.name, pdfPage, previewKind, strokes, textAnns])
 
   function undo() {
     if (curStroke) { setCurStroke(null); return }
@@ -600,7 +631,13 @@ const StudentPdfPanel = forwardRef<StudentPdfPanelHandle, { item: ReviewItem }>(
       badge={<span className={['rounded-full border px-1.5 py-0.5 text-xs font-medium', REVIEW_TYPE_CLS[item.reviewType]].join(' ')}>{item.reviewType}</span>}
       right={pageNav}
     >
-      <DrawingToolbar tool={tool} setTool={setTool} color={color} setColor={setColor} width={width} setWidth={setWidth} onUndo={undo} />
+      {previewKind === 'pdf' ? (
+        <DrawingToolbar tool={tool} setTool={setTool} color={color} setColor={setColor} width={width} setWidth={setWidth} onUndo={undo} />
+      ) : (
+        <div className="shrink-0 border-b border-[var(--color-border)] bg-white px-3 py-2 text-xs text-[var(--color-text-muted)]">
+          {previewKind === 'image' ? '图片提交支持预览；如需返回批改件，请上传批改 PDF。' : '当前文件类型暂不支持直接预览批改'}
+        </div>
+      )}
       <div ref={wrapRef} className="flex-1 overflow-auto bg-[#d4d8dc] p-4">
         {pdfLoading && <div className="flex h-full items-center justify-center gap-2 text-xs text-[var(--color-text-muted)]"><svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-6.219-8.56" /></svg>加载学生提交文件…</div>}
         {!pdfLoading && pdfError && <div className="flex h-40 items-center justify-center rounded-xl border-2 border-dashed border-red-200 text-xs text-red-400">{pdfError}</div>}
@@ -611,6 +648,11 @@ const StudentPdfPanel = forwardRef<StudentPdfPanelHandle, { item: ReviewItem }>(
             isDrawing={isDrawing} className="mx-auto" style={{ display: 'inline-block' }}>
             <canvas ref={pdfCanvasRef} className="block shadow-[0_2px_20px_rgba(0,0,0,0.15)]" />
           </AnnotationLayer>
+        )}
+        {!pdfLoading && !pdfError && previewKind === 'image' && !!imageUrlRef.current && (
+          <div className="mx-auto max-w-full overflow-hidden rounded-xl bg-white p-3 shadow-[0_2px_20px_rgba(0,0,0,0.15)]">
+            <img src={imageUrlRef.current} alt={item.fileName || 'student-submission'} className="mx-auto block max-h-[72vh] max-w-full object-contain" />
+          </div>
         )}
       </div>
     </PanelShell>
@@ -709,11 +751,27 @@ function ScorePanel({ scores, setScores, grade, setGrade }: {
 }
 
 // ── ReportPanel (右下) ────────────────────────────────────────────────────────
-function ReportPanel({ submissionId, totalScore, notes, setNotes, studentPdfPanelRef }: {
+void ScorePanel
+function ReviewGuidePanel() {
+  return (
+    <PanelShell title="批改说明">
+      <div className="flex-1 space-y-3 overflow-auto px-4 py-3 text-xs leading-6 text-[var(--color-text-secondary)]">
+        <div className="rounded-xl bg-[var(--color-bg-left)] px-4 py-3">
+          当前批改流程只保留批改 PDF，不再填写分数和评语。
+        </div>
+        <div className="rounded-xl border border-[var(--color-border)] bg-white px-4 py-3">
+          可以直接在学生原作业上批注，或者上传一份整理好的批改 PDF。
+        </div>
+        <div className="rounded-xl border border-dashed border-[var(--color-border)] bg-white px-4 py-3">
+          提交后系统会自动同步到学生端对应的批改反馈入口。
+        </div>
+      </div>
+    </PanelShell>
+  )
+}
+
+function ReportPanel({ submissionId, studentPdfPanelRef }: {
   submissionId: string
-  totalScore: number
-  notes: string
-  setNotes: (v: string) => void
   studentPdfPanelRef: React.RefObject<StudentPdfPanelHandle | null>
 }) {
   const [pdfDoc, setPdfDoc]         = useState<PDFDocumentProxy | null>(null)
@@ -733,6 +791,10 @@ function ReportPanel({ submissionId, totalScore, notes, setNotes, studentPdfPane
   const [reviewedFileName, setReviewedFileName] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const notes = ''
+  const setNotes = () => {}
+  void notes
+  void setNotes
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null)
   const annotRef     = useRef<HTMLCanvasElement>(null)
   const wrapRef      = useRef<HTMLDivElement>(null)
@@ -773,9 +835,9 @@ function ReportPanel({ submissionId, totalScore, notes, setNotes, studentPdfPane
     const file = e.target.files?.[0]; e.target.value = ''; if (!file) return
     setLoading(true); setError('')
     try {
-      const buf = await file.arrayBuffer()
-      const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise
-      originalPdfBytesRef.current = buf
+      const sourceBytes = await file.arrayBuffer()
+      originalPdfBytesRef.current = clonePdfBytes(sourceBytes)
+      const doc = await pdfjsLib.getDocument({ data: new Uint8Array(sourceBytes) }).promise
       annotationMapRef.current = {}
       renderSizeMapRef.current = {}
       setPdfDoc(doc); setTotalPages(doc.numPages); setPdfPage(1)
@@ -865,7 +927,7 @@ function ReportPanel({ submissionId, totalScore, notes, setNotes, studentPdfPane
             {`Feedback PDF: ${reviewedFileName}`}
           </div>
         )}
-        <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
+        <textarea rows={3} value="" onChange={() => {}} style={{ display: 'none' }}
           placeholder="批改意见、问题总结与改进建议…"
           className="w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-left)] px-3 py-2 text-xs leading-relaxed text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-primary)]" />
         {!!submitError && (
@@ -900,22 +962,22 @@ function ReportPanel({ submissionId, totalScore, notes, setNotes, studentPdfPane
               }
 
               if (!fileToUpload) {
-                setSubmitError('Please annotate the student PDF in the page, or upload a reviewed PDF first.')
+                setSubmitError('请在学生作业上批注，或先上传批改后的 PDF 文件。')
                 return
               }
 
               await uploadReviewedSubmissionPdf(submissionId, fileToUpload)
-              await api.put(`/api/submissions/${submissionId}/grade`, { score: totalScore, feedback: notes })
+              await api.put(`/api/submissions/${submissionId}/grade`, {})
               setReviewedFileName(fileToUpload.name)
               setSubmitted(true)
             } catch (error) {
-              setSubmitError(error instanceof Error ? error.message : '?????????')
+              setSubmitError(error instanceof Error ? error.message : '提交失败，请重试')
             } finally {
               setSubmitting(false)
             }
           }}
             className="w-full rounded-lg bg-[var(--color-primary)] py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40">
-            {submitting ? 'Submitting...' : 'Submit Review Result'}
+            {submitting ? '提交中…' : '提交批改结果'}
           </button>
         )}
       </div>
@@ -1004,10 +1066,6 @@ export function GradingWorkspace({ item, onBack }: { item: ReviewItem; onBack: (
   const rightColRef = useRef<HTMLDivElement>(null)
   const outerRowRef = useRef<HTMLDivElement>(null)
 
-  const [scores, setScores] = useState<Record<string, string>>({})
-  const [grade, setGrade]   = useState('')
-  const [notes, setNotes]   = useState('')
-  const totalScore = SCORE_SECTIONS.reduce((s, r) => s + (parseFloat(scores[r.key] ?? '') || 0), 0)
   const studentPdfPanelRef = useRef<StudentPdfPanelHandle | null>(null)
 
   return createPortal(
@@ -1064,11 +1122,11 @@ export function GradingWorkspace({ item, onBack }: { item: ReviewItem; onBack: (
         {/* Right column */}
         <div ref={rightColRef} className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div style={{ height: `${rightRatio * 100}%` }} className="min-h-0 overflow-hidden">
-            <ScorePanel scores={scores} setScores={setScores} grade={grade} setGrade={setGrade} />
+            <ReviewGuidePanel />
           </div>
           <ResizeHandle direction="row" onDragStart={(sy) => startResize(sy, 'y', rightRatioRef, rightColRef, setRightRatio)} />
           <div className="min-h-0 flex-1 overflow-hidden">
-            <ReportPanel submissionId={item.id} totalScore={totalScore} notes={notes} setNotes={setNotes} studentPdfPanelRef={studentPdfPanelRef} />
+            <ReportPanel submissionId={item.id} studentPdfPanelRef={studentPdfPanelRef} />
           </div>
         </div>
       </div>

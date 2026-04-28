@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE_URL = import.meta.env.PROD ? '' : 'http://localhost:3000'
+const DEFAULT_API_BASE_URL = 'https://apix.1v1.buzhi.com'
 const ENV_API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '')
   .trim()
   .replace(/\/+$/, '')

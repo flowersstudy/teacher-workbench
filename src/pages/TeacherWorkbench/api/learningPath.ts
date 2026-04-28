@@ -20,3 +20,10 @@ export function updateStudentLearningPathTask(
 ): Promise<{ ok: boolean }> {
   return api.patch<{ ok: boolean }>(`/api/teacher/students/${studentId}/learning-path/tasks/${taskId}`, data)
 }
+
+export async function uploadPdf(file: File): Promise<string> {
+  const form = new FormData()
+  form.append('file', file)
+  const result = await api.postForm<{ url: string }>('/api/teacher/upload/pdf', form)
+  return result.url
+}
