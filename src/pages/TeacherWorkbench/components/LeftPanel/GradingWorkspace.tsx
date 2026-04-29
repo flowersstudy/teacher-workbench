@@ -5,6 +5,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { ReviewItem } from '../../api/submissions'
 import { fetchSubmissionFileBlob, getSubmissionFileKind, uploadReviewedSubmissionPdf } from '../../api/submissions'
+import { getSubmissionStageMeta } from '../../lib/submissionLabels'
 import { api } from '../../../../lib/api'
 
 // ── pdfjs worker ──────────────────────────────────────────────────────────────
@@ -58,6 +59,10 @@ const REVIEW_TYPE_CLS: Record<ReviewItem['reviewType'], string> = {
   '整卷批改':  'bg-[#f3e8ff] text-[#6b21a8] border-[#d4b4f4]',
   '二阶试卷':  'bg-[#fef3c7] text-[#92400e] border-[#fcd34d]',
 }
+void TYPE_CATEGORY
+void CATEGORY_CFG
+void REVIEW_TYPE_CLS
+
 const PRIORITY_CFG = {
   urgent: { cls: 'bg-red-50 text-red-600 border border-red-200',          label: '紧急' },
   normal: { cls: 'bg-orange-50 text-orange-500 border border-orange-200', label: '普通' },
@@ -628,7 +633,7 @@ const StudentPdfPanel = forwardRef<StudentPdfPanelHandle, { item: ReviewItem }>(
 
   return (
     <PanelShell title="学生提交试卷"
-      badge={<span className={['rounded-full border px-1.5 py-0.5 text-xs font-medium', REVIEW_TYPE_CLS[item.reviewType]].join(' ')}>{item.reviewType}</span>}
+      badge={<span className={['rounded-full border px-1.5 py-0.5 text-xs font-medium', getSubmissionStageMeta(item.stageKey).badgeClass].join(' ')}>{item.taskLabel}</span>}
       right={pageNav}
     >
       {previewKind === 'pdf' ? (
@@ -1053,8 +1058,7 @@ function startResize(
 // ── GradingWorkspace ───────────────────────────────────────────────────────────
 export function GradingWorkspace({ item, onBack }: { item: ReviewItem; onBack: () => void }) {
   const pcfg     = PRIORITY_CFG[item.priority]
-  const category = TYPE_CATEGORY[item.reviewType]
-  const catCfg   = CATEGORY_CFG[category]
+  const stageMeta = getSubmissionStageMeta(item.stageKey)
 
   const [leftRatio, setLeftRatio]   = useState(0.5)
   const [rightRatio, setRightRatio] = useState(0.5)
@@ -1084,7 +1088,8 @@ export function GradingWorkspace({ item, onBack }: { item: ReviewItem; onBack: (
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-sm font-semibold text-[var(--color-text-primary)]">{item.name}</span>
-            <span className={['rounded-full border px-1.5 py-0.5 text-xs font-medium', REVIEW_TYPE_CLS[item.reviewType]].join(' ')}>{item.reviewType}</span>
+            <span className={['rounded-full border px-1.5 py-0.5 text-xs font-medium', stageMeta.badgeClass].join(' ')}>{item.stageLabel}</span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-medium text-slate-700">{item.taskLabel}</span>
             <span className={['rounded-full px-1.5 py-0.5 text-xs font-medium', pcfg.cls].join(' ')}>{pcfg.label}</span>
             <span className={['rounded-full border px-1.5 py-0.5 text-xs font-medium',
               item.submittedNormal ? 'border-green-200 bg-green-50 text-green-600' : 'border-orange-200 bg-orange-50 text-orange-500'].join(' ')}>
@@ -1092,14 +1097,14 @@ export function GradingWorkspace({ item, onBack }: { item: ReviewItem; onBack: (
             </span>
           </div>
           <div className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
-            <span>{item.checkpoint}</span><span>·</span><span>{item.submittedAt}</span><span>·</span><span>截止 {item.deadline}</span>
+            <span>{item.pointName || item.checkpoint}</span><span>·</span><span>{item.submittedAt}</span><span>·</span><span>截止 {item.deadline}</span>
           </div>
         </div>
         <div className="flex-1" />
-        <div className={['flex items-center gap-1.5 rounded-lg border px-3 py-1.5', catCfg.activeCls].join(' ')}>
-          <div className={['h-2 w-2 rounded-full', catCfg.dot].join(' ')} />
-          <span className="text-xs font-semibold">{category}</span>
-          <span className="text-xs opacity-60">{catCfg.desc}</span>
+        <div className={['flex items-center gap-1.5 rounded-lg border px-3 py-1.5', stageMeta.panelClass].join(' ')}>
+          <div className={['h-2 w-2 rounded-full', stageMeta.panelDotClass].join(' ')} />
+          <span className="text-xs font-semibold">{item.stageLabel}</span>
+          <span className="text-xs opacity-60">{stageMeta.panelDesc}</span>
         </div>
       </div>
 

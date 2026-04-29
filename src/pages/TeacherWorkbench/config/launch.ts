@@ -9,7 +9,7 @@ export const ENABLED_TASK_KEYS = [
   'pendingReply',
   'abnormalUser',
   'pendingReview',
-  'pendingLeave',
+  'pendingReport',
   'pendingAssign',
   'pendingLink',
   'liveDrill',

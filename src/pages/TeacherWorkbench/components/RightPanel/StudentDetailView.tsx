@@ -288,6 +288,8 @@ export function StudentDetailView({
   const loadStudentFlag = useWorkbenchStore((state) => state.loadStudentFlag)
   const complaintsMap = useWorkbenchStore((state) => state.complaintsMap)
   const resolveComplaint = useWorkbenchStore((state) => state.resolveComplaint)
+  const targetLearningPathPointName = useWorkbenchStore((state) => state.targetLearningPathPointName)
+  const clearTargetLearningPathPointName = useWorkbenchStore((state) => state.clearTargetLearningPathPointName)
 
   const openAssignModal = useCallback(async () => {
     setAssignOpen(true)
@@ -412,10 +414,20 @@ export function StudentDetailView({
   useEffect(() => {
     if (checkpointTabs.length === 0) {
       setActiveCheckpoint('')
+      if (targetLearningPathPointName) {
+        clearTargetLearningPathPointName()
+      }
       return
     }
 
     setActiveCheckpoint((current) => {
+      if (targetLearningPathPointName) {
+        const targetCheckpoint = checkpointTabs.find((checkpoint) => checkpoint.name === targetLearningPathPointName)
+        if (targetCheckpoint) {
+          return targetCheckpoint.name
+        }
+      }
+
       if (current && checkpointTabs.some((checkpoint) => checkpoint.name === current)) {
         return current
       }
@@ -426,7 +438,13 @@ export function StudentDetailView({
 
       return preferred?.name || ''
     })
-  }, [checkpointTabs, learningPathPointName])
+  }, [checkpointTabs, clearTargetLearningPathPointName, learningPathPointName, targetLearningPathPointName])
+
+  useEffect(() => {
+    if (!targetLearningPathPointName) return
+    if (activeCheckpoint !== targetLearningPathPointName) return
+    clearTargetLearningPathPointName()
+  }, [activeCheckpoint, clearTargetLearningPathPointName, targetLearningPathPointName])
 
   async function handleAddInfo() {
     const text = infoDraft.trim()

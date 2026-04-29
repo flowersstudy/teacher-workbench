@@ -1,9 +1,10 @@
 import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useWorkbenchStore } from '../../store/workbenchStore'
-import { GradingWorkspace } from './GradingWorkspace'
 import { fetchSubmissions } from '../../api/submissions'
 import type { ReviewItem, Submission } from '../../api/submissions'
+import { getSubmissionStageLabel, getSubmissionStageMeta, getSubmissionTaskLabel } from '../../lib/submissionLabels'
+import { useWorkbenchStore } from '../../store/workbenchStore'
+import { GradingWorkspace } from './GradingWorkspace'
 
 const priorityCfg = {
   urgent: { label: '紧急', dot: 'bg-red-500', badge: 'bg-red-50 text-red-600 border-red-200' },
@@ -18,34 +19,12 @@ const STAGE_TABS = [
   { key: 'diagnose', label: '诊断' },
   { key: 'theory', label: '理论' },
   { key: 'training', label: '实训' },
-  { key: 'exam', label: '测试' },
+  { key: 'exam', label: '考试' },
   { key: 'drill', label: '刷题' },
+  { key: 'practice', label: '作业' },
 ] as const
 
 type StageTabKey = typeof STAGE_TABS[number]['key']
-
-function getStageLabel(stageKey: string): string {
-  if (stageKey === 'report') return '完成'
-  const match = STAGE_TABS.find((tab) => tab.key === stageKey)
-  return match ? match.label : '未分类'
-}
-
-function getReviewTypeClass(reviewType: string): string {
-  switch (reviewType) {
-    case '入学诊断':
-      return 'bg-[#e6f1fb] text-[#185fa5]'
-    case '卡点练习题':
-      return 'bg-[#e8f5e2] text-[#2d6a2d]'
-    case '卡点考试':
-      return 'bg-[#fff0e8] text-[#b06040]'
-    case '整卷批改':
-      return 'bg-[#f3e8ff] text-[#6b21a8]'
-    case '二阶试卷':
-      return 'bg-[#fef3c7] text-[#92400e]'
-    default:
-      return 'bg-slate-100 text-slate-600'
-  }
-}
 
 function scheduleNotification(title: string, body: string, delayMs: number) {
   const run = () => {
@@ -78,8 +57,8 @@ async function requestAndSchedule(item: ReviewItem, minutesBefore: number) {
 
   const fireAt = new Date(due.getTime() - minutesBefore * 60 * 1000)
   scheduleNotification(
-    '📝 待批改提醒',
-    `${item.name} 的 ${item.reviewType}（${item.pointName || item.checkpoint}）将于 ${item.deadline} 截止`,
+    '待批改提醒',
+    `${item.name} · ${item.pointName || item.checkpoint} · ${item.stageLabel} · ${item.taskLabel} 将于 ${item.deadline} 截止`,
     fireAt.getTime() - now.getTime(),
   )
 
@@ -159,6 +138,7 @@ function ReviewRow({ item, onReview }: { item: ReviewItem; onReview: (item: Revi
   const [showReminder, setShowReminder] = useState(false)
   const rowRef = useRef<HTMLDivElement>(null)
   const priority = priorityCfg[item.priority]
+  const stageMeta = getSubmissionStageMeta(item.stageKey)
 
   useEffect(() => {
     if (!showReminder) return
@@ -188,11 +168,11 @@ function ReviewRow({ item, onReview }: { item: ReviewItem; onReview: (item: Revi
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-sm font-semibold text-[var(--color-text-primary)]">{item.name}</span>
-          <span className={['rounded-full border px-1.5 py-0.5 text-[9px] font-medium', getReviewTypeClass(item.reviewType)].join(' ')}>
-            {item.reviewType}
+          <span className={['rounded-full border px-1.5 py-0.5 text-[9px] font-medium', stageMeta.badgeClass].join(' ')}>
+            {item.stageLabel}
           </span>
-          <span className="rounded-full border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-medium text-blue-700">
-            {getStageLabel(item.stageKey)}
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-medium text-slate-700">
+            {item.taskLabel}
           </span>
           <span className={['rounded-full border px-1.5 py-0.5 text-[9px] font-medium', priority.badge].join(' ')}>
             {priority.label}
@@ -240,6 +220,9 @@ const AVATAR_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#
 
 function submissionToReviewItem(s: Submission, idx: number, reviewContactIdByName: Record<string, string>): ReviewItem {
   const colorIdx = idx % AVATAR_COLORS.length
+  const stageKey = String(s.stage_key || '').trim() || 'diagnose'
+  const taskId = String(s.task_id || '').trim()
+
   return {
     id: s.id,
     name: s.student_name,
@@ -250,8 +233,10 @@ function submissionToReviewItem(s: Submission, idx: number, reviewContactIdByNam
     reviewType: s.review_type,
     checkpoint: s.checkpoint,
     pointName: s.point_name,
-    stageKey: String(s.stage_key || '').trim() || 'diagnose',
-    taskId: s.task_id,
+    stageKey,
+    taskId,
+    stageLabel: getSubmissionStageLabel(stageKey),
+    taskLabel: getSubmissionTaskLabel(taskId, s.file_name),
     deadline: s.deadline,
     priority: s.priority,
     submittedAt: s.submitted_at,
@@ -353,7 +338,7 @@ export function ReviewModal() {
                   onClick={close}
                   className="rounded px-2 py-1 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg-left)]"
                 >
-                  ✕
+                  ×
                 </button>
               </div>
             </div>

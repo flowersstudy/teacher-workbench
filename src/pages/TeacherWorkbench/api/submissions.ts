@@ -7,7 +7,7 @@ export type SubmissionFileKind = 'pdf' | 'image' | 'other'
 export interface Submission {
   id: string
   student_name: string
-  review_type: ReviewType
+  review_type: string
   checkpoint: string
   point_name?: string
   stage_key?: string
@@ -26,11 +26,13 @@ export interface ReviewItem {
   color: string
   contactId: string
   fileName: string
-  reviewType: ReviewType
+  reviewType: string
   checkpoint: string
   pointName?: string
   stageKey: string
   taskId?: string
+  stageLabel: string
+  taskLabel: string
   submittedAt: string
   deadline: string
   priority: ReviewPriority

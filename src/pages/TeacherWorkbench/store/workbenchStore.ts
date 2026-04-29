@@ -236,10 +236,10 @@ interface WorkbenchState {
   studentFeedbackOpen: boolean
   openStudentFeedbackModal: () => void
   closeStudentFeedbackModal: () => void
-  addCalendarEvent: (event: CalEvent) => void
+  addCalendarEvent: (event: CalEvent) => Promise<boolean>
   updateCalendarEvent: (event: CalEvent) => void
   deleteCalendarEvent: (id: string) => void
-  setEventLink: (studentId: string, courseType: string, linkType: 'live' | 'replay', link: string, pointName: string) => Promise<void>
+  setEventLink: (studentId: string, courseType: string, linkType: 'live' | 'replay', link: string, pointName: string, eventId?: string) => Promise<void>
   loadCalendarEvents: () => Promise<void>
   linkUploadItem: TaskListItem | null
   openLinkUpload: (item: TaskListItem) => void
@@ -253,8 +253,10 @@ interface WorkbenchState {
   openReplayUpload: (item: TaskListItem) => void
   closeReplayUpload: () => void
   targetStudentId: string | null
-  openStudentProfile: (studentId: string) => void
+  targetLearningPathPointName: string
+  openStudentProfile: (studentId: string, pointName?: string) => void
   clearTargetStudent: () => void
+  clearTargetLearningPathPointName: () => void
   targetTeacherName: string | null
   openTeacherProfile: (name: string) => void
   clearTargetTeacher: () => void
@@ -311,12 +313,12 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   studentFeedbackOpen: false,
   calendarEvents: [],
   teacherName: getTeacherNameFromToken(),
-  taskCounts: { pendingClass: 0, pendingReply: 0, abnormalUser: 0, pendingReview: 0, pendingLeave: 0, pendingAssign: 0, pendingLink: 0, liveDrill: 0, pendingHandout: 0, pendingFeedback: 0 },
+  taskCounts: { pendingClass: 0, pendingReply: 0, abnormalUser: 0, pendingReview: 0, pendingReport: 0, pendingAssign: 0, pendingLink: 0, liveDrill: 0, pendingHandout: 0, pendingFeedback: 0 },
   loadTaskCounts: async () => {
     const data = await api.get<{
       pendingClass?: number
       pendingGrade?: number
-      pendingLeave?: number
+      pendingReport?: number
       newStudents?: number
       abnormal?: number
       pendingReply?: number
@@ -332,7 +334,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
           pendingReply:   data.pendingReply  ?? 0,
           abnormalUser:   data.abnormal      ?? 0,
           pendingReview:  data.pendingGrade  ?? 0,
-          pendingLeave:   data.pendingLeave  ?? 0,
+          pendingReport:  data.pendingReport ?? 0,
           liveDrill:      0,
           pendingAssign:  data.pendingAssign ?? 0,
           pendingLink:    data.pendingLink   ?? 0,
@@ -347,7 +349,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     pendingReply: [],
     abnormalUser: [],
     pendingReview: [],
-    pendingLeave: [],
+    pendingReport: [],
     pendingAssign: [],
     pendingLink: [],
     liveDrill: [],
@@ -363,7 +365,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         pendingReply: Array.isArray(data.pendingReply) ? data.pendingReply : [],
         abnormalUser: Array.isArray(data.abnormalUser) ? data.abnormalUser : [],
         pendingReview: Array.isArray(data.pendingReview) ? data.pendingReview : [],
-        pendingLeave: Array.isArray(data.pendingLeave) ? data.pendingLeave : [],
+        pendingReport: Array.isArray(data.pendingReport) ? data.pendingReport : [],
         pendingAssign: Array.isArray(data.pendingAssign) ? data.pendingAssign : [],
         pendingLink: Array.isArray(data.pendingLink) ? data.pendingLink : [],
         liveDrill: [],
@@ -723,8 +725,11 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
           calendarEvents: s.calendarEvents.map((e) => e.id === event.id ? { ...e, id: String(data.id) } : e),
         }))
       }
+      await get().loadCalendarEvents()
+      return true
     } catch {
       set((s) => ({ calendarEvents: s.calendarEvents.filter((e) => e.id !== event.id) }))
+      return false
     }
   },
   updateCalendarEvent: (event) => {
@@ -738,10 +743,11 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     set((s) => ({ calendarEvents: s.calendarEvents.filter((e) => e.id !== id) }))
     void api.delete(`/api/teacher/calendar/${id}`)
   },
-  setEventLink: async (studentId, courseType, linkType, link, pointName) => {
-    await api.post('/api/teacher/live-link', { studentId, courseType, linkType, link, pointName })
+  setEventLink: async (studentId, courseType, linkType, link, pointName, eventId) => {
+    await api.post('/api/teacher/live-link', { studentId, courseType, linkType, link, pointName, eventId })
     await get().loadTaskCounts()
     await get().loadTaskItems()
+    await get().loadCalendarEvents()
     await get().loadStudentInfo(studentId)
   },
   loadCalendarEvents: async () => {
@@ -754,6 +760,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       endTime: r.end_time as string,
       title: r.title as string,
       type: r.type as CalEvent['type'],
+      studentId: r.student_id === null || r.student_id === undefined ? undefined : String(r.student_id),
       link: (r.link as string) ?? undefined,
     }))
     set({ calendarEvents: events })
@@ -781,8 +788,14 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   openReplayUpload: (item) => set({ replayUploadItem: item }),
   closeReplayUpload: () => set({ replayUploadItem: null }),
   targetStudentId: null,
-  openStudentProfile: (studentId) => set({ targetStudentId: studentId, rightTab: 'students' }),
+  targetLearningPathPointName: '',
+  openStudentProfile: (studentId, pointName) => set({
+    targetStudentId: studentId,
+    targetLearningPathPointName: String(pointName || ''),
+    rightTab: 'students',
+  }),
   clearTargetStudent: () => set({ targetStudentId: null }),
+  clearTargetLearningPathPointName: () => set({ targetLearningPathPointName: '' }),
   targetTeacherName: null,
   openTeacherProfile: (name) => set({ targetTeacherName: name, rightTab: 'students' }),
   clearTargetTeacher: () => set({ targetTeacherName: null }),

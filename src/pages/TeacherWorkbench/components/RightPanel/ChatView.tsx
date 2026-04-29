@@ -175,7 +175,7 @@ function AddEventModal({
   onClose,
 }: {
   initialText: string
-  onAdd: (event: CalEvent) => void
+  onAdd: (event: CalEvent) => void | Promise<boolean>
   onClose: () => void
 }) {
   const today = format(new Date(), 'yyyy-MM-dd')

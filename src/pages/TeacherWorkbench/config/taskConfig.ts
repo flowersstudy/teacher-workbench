@@ -8,7 +8,7 @@ export const taskMeta: Record<
   pendingReply: { label: '待回复' },
   abnormalUser: { label: '异常学员', badgeTone: 'alert' },
   pendingReview: { label: '待批改' },
-  pendingLeave: { label: '请假审批', badgeTone: 'alert' },
+  pendingReport: { label: '待上传报告', badgeTone: 'alert' },
   pendingAssign: { label: '待分配学员' },
   pendingLink: { label: '待上传链接' },
   liveDrill: { label: '直播刷题' },

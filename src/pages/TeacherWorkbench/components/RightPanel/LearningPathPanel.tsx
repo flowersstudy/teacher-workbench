@@ -200,11 +200,13 @@ function ResourceEditor({
   stageKey: LearningPathStageKey
   onSaved: (taskId: string, url: string, videoId: string) => void
 }) {
-  const isPdf    = item.actionType === 'document'
+  const isPdf    = item.actionType === 'document' || item.actionType === 'report'
+  const isReport = item.actionType === 'report'
   const isVideo  = item.actionType === 'video'
   const isLive   = item.actionType === 'live'
   const isReplay = item.actionType === 'replay'
-  if (!isPdf && !isVideo && !isLive && !isReplay) return null
+  const isPdfLike = isPdf || isReport
+  if (!isPdfLike && !isVideo && !isLive && !isReplay) return null
 
   const currentUrl     = isLive ? (item.resource?.liveUrl ?? item.resource?.url ?? '')
                        : isReplay ? (item.resource?.replayUrl ?? item.resource?.url ?? '')
@@ -259,7 +261,7 @@ function ResourceEditor({
     setError('')
     try {
       const resource = {
-        resourceType: isPdf ? 'pdf' : isVideo ? 'video' : isLive ? 'live' : 'replay',
+        resourceType: isPdfLike ? 'pdf' : isVideo ? 'video' : isLive ? 'live' : 'replay',
         title: item.title,
         url: url.trim(),
         videoId: videoId.trim(),
@@ -282,7 +284,7 @@ function ResourceEditor({
     }
   }
 
-  const hasValue = (isLive || isReplay) ? !!currentUrl : isPdf ? !!currentUrl : !!currentVideoId
+  const hasValue = (isLive || isReplay) ? !!currentUrl : isPdfLike ? !!currentUrl : !!currentVideoId
 
   const buttonLabel = hasValue
     ? (isPdf ? '已设置链接' : isVideo ? '已设置视频' : isLive ? '已设置上课链接' : '已设置回放链接')

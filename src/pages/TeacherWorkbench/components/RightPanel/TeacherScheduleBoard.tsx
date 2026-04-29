@@ -15,7 +15,7 @@ import {
   subWeeks,
 } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../../../lib/api'
 import { useWorkbenchStore } from '../../store/workbenchStore'
 import type { CalEvent, StudentDetailMeta, StudentItem } from '../../types'
@@ -54,8 +54,9 @@ const VIEW_LABELS: Record<CalendarViewMode, string> = {
 const HOUR_START = 0
 const HOUR_END = 24
 const HOUR_COUNT = HOUR_END - HOUR_START
-const HOUR_HEIGHT = 60
-const TOTAL_HEIGHT = HOUR_COUNT * HOUR_HEIGHT
+const DEFAULT_VISIBLE_HOUR = 9
+const VISIBLE_HOUR_COUNT = 12
+const FALLBACK_HOUR_HEIGHT = 60
 const DAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 const HOURS = Array.from({ length: HOUR_COUNT }, (_, index) => HOUR_START + index)
 const TEACHER_COLORS = ['#e8845a', '#d79c69', '#5fa8d3', '#8a7bd1', '#63c1c7', '#5fbf84']
@@ -84,8 +85,57 @@ function timeToMinutes(time: string) {
   return hour * 60 + minute
 }
 
-function minutesToTop(minutes: number) {
-  return ((minutes - HOUR_START * 60) / 60) * HOUR_HEIGHT
+function minutesToTop(minutes: number, hourHeight: number) {
+  return ((minutes - HOUR_START * 60) / 60) * hourHeight
+}
+
+function getEventLayout(startTime: string, endTime: string, hourHeight: number) {
+  const startMinutes = timeToMinutes(startTime)
+  const endMinutes = timeToMinutes(endTime)
+
+  if (endMinutes <= startMinutes) {
+    return null
+  }
+
+  return {
+    top: minutesToTop(startMinutes, hourHeight),
+    height: Math.max(((endMinutes - startMinutes) / 60) * hourHeight, 20),
+  }
+}
+
+function useTimelineMetrics(
+  containerRef: { current: HTMLDivElement | null },
+  headerRef: { current: HTMLDivElement | null },
+) {
+  const [hourHeight, setHourHeight] = useState(FALLBACK_HOUR_HEIGHT)
+
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const measure = () => {
+      const containerHeight = container.clientHeight
+      const headerHeight = headerRef.current?.offsetHeight ?? 0
+      const visibleHeight = Math.max(containerHeight - headerHeight, 360)
+      setHourHeight(visibleHeight / VISIBLE_HOUR_COUNT)
+    }
+
+    measure()
+
+    if (typeof ResizeObserver !== 'function') return
+
+    const observer = new ResizeObserver(() => measure())
+    observer.observe(container)
+    if (headerRef.current) observer.observe(headerRef.current)
+
+    return () => observer.disconnect()
+  }, [containerRef, headerRef])
+
+  return {
+    hourHeight,
+    totalHeight: HOUR_COUNT * hourHeight,
+    defaultScrollTop: (DEFAULT_VISIBLE_HOUR - HOUR_START) * hourHeight,
+  }
 }
 
 function addDefaultDuration(startTime: string, minutes = 90) {
@@ -119,6 +169,7 @@ function mapCalendarRow(row: Record<string, unknown>): CalEvent {
     endTime: String(row.end_time ?? row.endTime ?? ''),
     title: String(row.title ?? ''),
     type: row.type === 'meeting' ? 'meeting' : 'class',
+    studentId: row.student_id === null || row.student_id === undefined ? undefined : String(row.student_id),
     link: row.link ? String(row.link) : undefined,
   }
 }
@@ -214,10 +265,10 @@ function StudentListItem({
           <span className="truncate text-sm font-semibold text-[var(--color-text-primary)]">{student.name}</span>
           <StatusTag student={student} />
         </div>
-        <div className="mt-0.5 truncate text-[11px] text-[var(--color-text-muted)]">
+        <div className="mt-0.5 truncate text-[13px] text-[var(--color-text-muted)]">
           {student.grade || '未填写年级'} · {student.subject || '未填写学科'}
         </div>
-        <div className="mt-0.5 truncate text-[11px] text-[var(--color-text-muted)]">
+        <div className="mt-0.5 truncate text-[13px] text-[var(--color-text-muted)]">
           最近上课：{student.lastSession || '暂无'}
         </div>
       </div>
@@ -395,22 +446,25 @@ function AddSlotModal({
 
 function EventBlock({
   event,
+  hourHeight,
   teacherColor,
   onEventClick,
 }: {
   event: CalEvent
+  hourHeight: number
   teacherColor: string
   onEventClick: (event: CalEvent) => void
 }) {
-  const top = minutesToTop(timeToMinutes(event.startTime))
-  const height = Math.max(((timeToMinutes(event.endTime) - timeToMinutes(event.startTime)) / 60) * HOUR_HEIGHT, 20)
+  const layout = getEventLayout(event.startTime, event.endTime, hourHeight)
+
+  if (!layout) return null
 
   return (
     <div
-      className="absolute left-0.5 right-0.5 cursor-pointer overflow-hidden rounded px-1.5 py-1 text-white hover:brightness-95"
+      className="absolute left-0.5 right-0.5 cursor-pointer overflow-hidden rounded-md px-2 py-1.5 text-white hover:brightness-95"
       style={{
-        top,
-        height,
+        top: layout.top,
+        height: layout.height,
         backgroundColor: event.type === 'class' ? teacherColor : '#9b6fcc',
         opacity: 0.92,
       }}
@@ -419,8 +473,8 @@ function EventBlock({
         onEventClick(event)
       }}
     >
-      <div className="truncate text-[11px] font-semibold leading-tight">{event.title}</div>
-      <div className="text-[11px] opacity-80">{event.startTime}–{event.endTime}</div>
+      <div className="truncate text-sm font-semibold leading-tight">{event.title}</div>
+      <div className="text-[13px] opacity-80">{event.startTime}–{event.endTime}</div>
     </div>
   )
 }
@@ -443,10 +497,35 @@ function WeekView({
   onEventClick: (event: CalEvent) => void
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const defaultAnchorRef = useRef<HTMLDivElement>(null)
+  const headerRef = useRef<HTMLDivElement>(null)
+  const scrollKey = useMemo(() => weekStart.toISOString(), [weekStart])
+  const { hourHeight, totalHeight, defaultScrollTop } = useTimelineMetrics(scrollRef, headerRef)
 
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = 8 * HOUR_HEIGHT
-  }, [weekStart])
+  useLayoutEffect(() => {
+    const node = scrollRef.current
+    const anchor = defaultAnchorRef.current
+    if (!node) return
+
+    const applyScroll = () => {
+      if (anchor) {
+        anchor.scrollIntoView({ block: 'start' })
+      }
+      node.scrollTop = defaultScrollTop
+    }
+
+    applyScroll()
+    const frameId = requestAnimationFrame(() => {
+      applyScroll()
+      requestAnimationFrame(applyScroll)
+    })
+    const timeoutId = window.setTimeout(applyScroll, 120)
+
+    return () => {
+      cancelAnimationFrame(frameId)
+      window.clearTimeout(timeoutId)
+    }
+  }, [defaultScrollTop, scrollKey, events.length])
 
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)),
@@ -463,17 +542,17 @@ function WeekView({
 
   return (
     <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-auto">
-      <div className="sticky top-0 z-10 flex border-b border-[var(--color-border)] bg-white">
-        <div className="w-12 shrink-0 border-r border-[var(--color-border)]" />
+      <div ref={headerRef} className="sticky top-0 z-10 flex border-b border-[var(--color-border)] bg-white">
+        <div className="w-16 shrink-0 border-r border-[var(--color-border)]" />
         {days.map((day) => (
           <div
             key={day.toISOString()}
             className="flex flex-1 flex-col items-center border-r border-[var(--color-border)] py-2 last:border-r-0"
           >
-            <span className="text-[11px] text-[var(--color-text-muted)]">{DAY_NAMES[getDay(day)]}</span>
+            <span className="text-[13px] font-medium text-[var(--color-text-muted)]">{DAY_NAMES[getDay(day)]}</span>
             <div
               className={[
-                'mt-0.5 flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold',
+                'mt-1 flex h-8 w-8 items-center justify-center rounded-full text-base font-semibold',
                 isToday(day) ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-text-primary)]',
               ].join(' ')}
             >
@@ -483,13 +562,18 @@ function WeekView({
         ))}
       </div>
 
-      <div className="relative flex" style={{ height: TOTAL_HEIGHT }}>
-        <div className="sticky left-0 z-10 w-12 shrink-0 border-r border-[var(--color-border)] bg-white">
+      <div className="relative flex" style={{ height: totalHeight }}>
+        <div
+          ref={defaultAnchorRef}
+          className="pointer-events-none absolute left-0 right-0"
+          style={{ top: defaultScrollTop, height: 1 }}
+        />
+        <div className="sticky left-0 z-10 w-16 shrink-0 border-r border-[var(--color-border)] bg-white">
           {HOURS.map((hour) => (
             <div
               key={hour}
-              className="absolute w-full pr-1.5 text-right text-[11px] text-[var(--color-text-muted)]"
-              style={{ top: (hour - HOUR_START) * HOUR_HEIGHT - 7 }}
+              className="absolute w-full pr-2 text-right text-[13px] font-medium text-[var(--color-text-muted)]"
+              style={{ top: (hour - HOUR_START) * hourHeight - 7 }}
             >
               {hour}:00
             </div>
@@ -498,7 +582,7 @@ function WeekView({
 
         {days.map((day) => {
           const date = format(day, 'yyyy-MM-dd')
-          const dayEvents = eventsByDate[date] ?? []
+          const dayEvents = (eventsByDate[date] ?? []).filter((event) => getEventLayout(event.startTime, event.endTime, hourHeight))
 
           return (
             <div
@@ -507,10 +591,10 @@ function WeekView({
               onClick={(eventObject) => {
                 if (readOnly) return
                 const rect = eventObject.currentTarget.getBoundingClientRect()
-                const relativeY = eventObject.clientY - rect.top
-                const rawHour = HOUR_START + relativeY / HOUR_HEIGHT
+                const relativeY = eventObject.clientY - rect.top + (scrollRef.current?.scrollTop ?? 0)
+                const rawHour = HOUR_START + relativeY / hourHeight
                 const hour = Math.floor(rawHour)
-                const minute = relativeY % HOUR_HEIGHT < HOUR_HEIGHT / 2 ? 0 : 30
+                const minute = relativeY % hourHeight < hourHeight / 2 ? 0 : 30
                 onCellClick(date, `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`)
               }}
             >
@@ -518,31 +602,28 @@ function WeekView({
                 <div
                   key={`${date}_${hour}`}
                   className="absolute w-full border-t border-[var(--color-border)]/50"
-                  style={{ top: (hour - HOUR_START) * HOUR_HEIGHT }}
+                  style={{ top: (hour - HOUR_START) * hourHeight }}
                 />
               ))}
               {HOURS.map((hour) => (
                 <div
                   key={`${date}_${hour}_half`}
                   className="absolute w-full border-t border-dashed border-[var(--color-border)]/30"
-                  style={{ top: (hour - HOUR_START) * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
+                  style={{ top: (hour - HOUR_START) * hourHeight + hourHeight / 2 }}
                 />
               ))}
 
               {dayEvents.map((event) => (
-                <EventBlock key={event.id} event={event} teacherColor={teacherColor} onEventClick={onEventClick} />
+                <EventBlock key={event.id} event={event} hourHeight={hourHeight} teacherColor={teacherColor} onEventClick={onEventClick} />
               ))}
 
               {pendingSlot?.date === date ? (
                 <div
-                  className="absolute left-0.5 right-0.5 rounded border-2 border-dashed border-[var(--color-primary)] bg-[var(--color-primary-light)] px-1.5 py-1"
-                  style={{
-                    top: minutesToTop(timeToMinutes(pendingSlot.startTime)),
-                    height: Math.max(((timeToMinutes(pendingSlot.endTime) - timeToMinutes(pendingSlot.startTime)) / 60) * HOUR_HEIGHT, 20),
-                  }}
+                  className="absolute left-0.5 right-0.5 rounded border-2 border-dashed border-[var(--color-primary)] bg-[var(--color-primary-light)] px-2 py-1.5"
+                  style={getEventLayout(pendingSlot.startTime, pendingSlot.endTime, hourHeight) ?? undefined}
                 >
-                  <div className="truncate text-[11px] font-semibold text-[var(--color-primary)]">新排课</div>
-                  <div className="text-[11px] text-[var(--color-primary)]">{pendingSlot.startTime}–{pendingSlot.endTime}</div>
+                  <div className="truncate text-sm font-semibold text-[var(--color-primary)]">新排课</div>
+                  <div className="text-[13px] text-[var(--color-primary)]">{pendingSlot.startTime}–{pendingSlot.endTime}</div>
                 </div>
               ) : null}
             </div>
@@ -571,22 +652,46 @@ function DayView({
   onEventClick: (event: CalEvent) => void
 }) {
   const dayKey = format(date, 'yyyy-MM-dd')
-  const dayEvents = events.filter((event) => event.date === dayKey)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const defaultAnchorRef = useRef<HTMLDivElement>(null)
+  const headerRef = useRef<HTMLDivElement>(null)
+  const { hourHeight, totalHeight, defaultScrollTop } = useTimelineMetrics(scrollRef, headerRef)
+  const dayEvents = events.filter((event) => event.date === dayKey && getEventLayout(event.startTime, event.endTime, hourHeight))
 
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = 8 * HOUR_HEIGHT
-  }, [dayKey])
+  useLayoutEffect(() => {
+    const node = scrollRef.current
+    const anchor = defaultAnchorRef.current
+    if (!node) return
+
+    const applyScroll = () => {
+      if (anchor) {
+        anchor.scrollIntoView({ block: 'start' })
+      }
+      node.scrollTop = defaultScrollTop
+    }
+
+    applyScroll()
+    const frameId = requestAnimationFrame(() => {
+      applyScroll()
+      requestAnimationFrame(applyScroll)
+    })
+    const timeoutId = window.setTimeout(applyScroll, 120)
+
+    return () => {
+      cancelAnimationFrame(frameId)
+      window.clearTimeout(timeoutId)
+    }
+  }, [dayKey, dayEvents.length, defaultScrollTop])
 
   return (
     <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-auto">
-      <div className="sticky top-0 z-10 flex border-b border-[var(--color-border)] bg-white">
-        <div className="w-12 shrink-0 border-r border-[var(--color-border)]" />
+      <div ref={headerRef} className="sticky top-0 z-10 flex border-b border-[var(--color-border)] bg-white">
+        <div className="w-16 shrink-0 border-r border-[var(--color-border)]" />
         <div className="flex flex-1 flex-col items-center border-r border-[var(--color-border)] py-2">
-          <span className="text-[11px] text-[var(--color-text-muted)]">{DAY_NAMES[getDay(date)]}</span>
+          <span className="text-[13px] font-medium text-[var(--color-text-muted)]">{DAY_NAMES[getDay(date)]}</span>
           <div
             className={[
-              'mt-0.5 flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold',
+              'mt-1 flex h-8 w-8 items-center justify-center rounded-full text-base font-semibold',
               isToday(date) ? 'bg-[var(--color-primary)] text-white' : 'text-[var(--color-text-primary)]',
             ].join(' ')}
           >
@@ -595,27 +700,32 @@ function DayView({
         </div>
       </div>
 
-      <div className="relative flex" style={{ height: TOTAL_HEIGHT }}>
-        <div className="sticky left-0 z-10 w-12 shrink-0 border-r border-[var(--color-border)] bg-white">
+      <div className="relative flex" style={{ height: totalHeight }}>
+        <div
+          ref={defaultAnchorRef}
+          className="pointer-events-none absolute left-0 right-0"
+          style={{ top: defaultScrollTop, height: 1 }}
+        />
+        <div className="sticky left-0 z-10 w-16 shrink-0 border-r border-[var(--color-border)] bg-white">
           {HOURS.map((hour) => (
             <div
               key={hour}
-              className="absolute w-full pr-1.5 text-right text-[11px] text-[var(--color-text-muted)]"
-              style={{ top: (hour - HOUR_START) * HOUR_HEIGHT - 7 }}
+              className="absolute w-full pr-2 text-right text-[13px] font-medium text-[var(--color-text-muted)]"
+              style={{ top: (hour - HOUR_START) * hourHeight - 7 }}
             >
               {hour}:00
             </div>
           ))}
         </div>
         <div
-          className="relative flex-1"
+          className="relative flex-1 border-r border-[var(--color-border)]"
           onClick={(eventObject) => {
             if (readOnly) return
             const rect = eventObject.currentTarget.getBoundingClientRect()
-            const relativeY = eventObject.clientY - rect.top
-            const rawHour = HOUR_START + relativeY / HOUR_HEIGHT
+            const relativeY = eventObject.clientY - rect.top + (scrollRef.current?.scrollTop ?? 0)
+            const rawHour = HOUR_START + relativeY / hourHeight
             const hour = Math.floor(rawHour)
-            const minute = relativeY % HOUR_HEIGHT < HOUR_HEIGHT / 2 ? 0 : 30
+            const minute = relativeY % hourHeight < hourHeight / 2 ? 0 : 30
             onCellClick(dayKey, `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`)
           }}
         >
@@ -623,31 +733,28 @@ function DayView({
             <div
               key={`${dayKey}_${hour}`}
               className="absolute w-full border-t border-[var(--color-border)]/50"
-              style={{ top: (hour - HOUR_START) * HOUR_HEIGHT }}
+              style={{ top: (hour - HOUR_START) * hourHeight }}
             />
           ))}
           {HOURS.map((hour) => (
             <div
               key={`${dayKey}_${hour}_half`}
               className="absolute w-full border-t border-dashed border-[var(--color-border)]/30"
-              style={{ top: (hour - HOUR_START) * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
+              style={{ top: (hour - HOUR_START) * hourHeight + hourHeight / 2 }}
             />
           ))}
 
           {dayEvents.map((event) => (
-            <EventBlock key={event.id} event={event} teacherColor={teacherColor} onEventClick={onEventClick} />
+            <EventBlock key={event.id} event={event} hourHeight={hourHeight} teacherColor={teacherColor} onEventClick={onEventClick} />
           ))}
 
           {pendingSlot?.date === dayKey ? (
             <div
-              className="absolute left-1 right-1 rounded border-2 border-dashed border-[var(--color-primary)] bg-[var(--color-primary-light)] px-2 py-1"
-              style={{
-                top: minutesToTop(timeToMinutes(pendingSlot.startTime)),
-                height: Math.max(((timeToMinutes(pendingSlot.endTime) - timeToMinutes(pendingSlot.startTime)) / 60) * HOUR_HEIGHT, 20),
-              }}
+              className="absolute left-1 right-1 rounded border-2 border-dashed border-[var(--color-primary)] bg-[var(--color-primary-light)] px-2 py-1.5"
+              style={getEventLayout(pendingSlot.startTime, pendingSlot.endTime, hourHeight) ?? undefined}
             >
               <div className="text-sm font-semibold text-[var(--color-primary)]">新排课</div>
-              <div className="text-[11px] text-[var(--color-primary)]">{pendingSlot.startTime}–{pendingSlot.endTime}</div>
+              <div className="text-[13px] text-[var(--color-primary)]">{pendingSlot.startTime}–{pendingSlot.endTime}</div>
             </div>
           ) : null}
         </div>
@@ -672,7 +779,7 @@ function EventPill({
         eventObject.stopPropagation()
         onEventClick(event)
       }}
-      className="flex min-w-0 items-center gap-1 truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white hover:brightness-95"
+      className="flex min-w-0 items-center gap-1 truncate rounded-full px-2 py-1 text-[12px] font-semibold text-white hover:brightness-95"
       style={{ backgroundColor: event.type === 'class' ? teacherColor : '#9b6fcc' }}
     >
       <span className="shrink-0 opacity-80">{event.startTime}</span>
@@ -699,7 +806,7 @@ function MonthView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border)] bg-white">
-      <div className="grid shrink-0 grid-cols-7 border-b border-[var(--color-border)] bg-[var(--color-bg-left)] text-[10px] font-semibold text-[var(--color-text-secondary)]">
+      <div className="grid shrink-0 grid-cols-7 border-b border-[var(--color-border)] bg-[var(--color-bg-left)] text-[12px] font-semibold text-[var(--color-text-secondary)]">
         {DAY_NAMES.map((name) => (
           <div key={name} className="px-2 py-2">{name}</div>
         ))}
@@ -730,7 +837,7 @@ function MonthView({
                   <EventPill key={event.id} event={event} teacherColor={teacherColor} onEventClick={onEventClick} />
                 ))}
                 {hiddenCount > 0 ? (
-                  <div className="text-[10px] text-[var(--color-text-muted)]">+{hiddenCount} 条日程</div>
+                  <div className="text-[12px] text-[var(--color-text-muted)]">+{hiddenCount} 条日程</div>
                 ) : null}
               </div>
             </button>
@@ -969,7 +1076,7 @@ export function TeacherScheduleBoard() {
     <div className="flex h-full min-h-0 overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border)]">
       <div className="flex w-60 shrink-0 flex-col border-r border-[var(--color-border)] bg-white">
         <div className="border-b border-[var(--color-border)] px-3 py-3">
-          <div className="mb-2 text-sm font-semibold text-[var(--color-text-secondary)]">学生列表</div>
+          <div className="mb-2 text-base font-semibold text-[var(--color-text-secondary)]">学生列表</div>
           <div className="relative">
             <svg
               className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]"
@@ -987,13 +1094,13 @@ export function TeacherScheduleBoard() {
               value={searchQuery}
               onChange={(eventObject) => setSearchQuery(eventObject.target.value)}
               placeholder="搜索学生…"
-              className="w-full rounded-lg border border-[var(--color-border)] py-1.5 pl-7 pr-3 text-sm outline-none focus:border-[var(--color-primary)] placeholder:text-[var(--color-text-muted)]"
+              className="w-full rounded-lg border border-[var(--color-border)] py-2 pl-7 pr-3 text-[15px] outline-none focus:border-[var(--color-primary)] placeholder:text-[var(--color-text-muted)]"
             />
           </div>
           <button
             type="button"
             onClick={handleResetTeacher}
-            className="mt-2 w-full rounded-lg border border-[var(--color-border)] py-1.5 text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-left)]"
+            className="mt-2 w-full rounded-lg border border-[var(--color-border)] py-2 text-[15px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-left)]"
           >
             查看我的日程
           </button>
@@ -1016,17 +1123,17 @@ export function TeacherScheduleBoard() {
 
         {selectedStudent ? (
           <div className="border-t border-[var(--color-border)] bg-[var(--color-primary-light)] px-3 py-2">
-            <div className="text-[11px] text-[var(--color-text-muted)]">当前学生</div>
-            <div className="mt-0.5 text-sm font-semibold text-[var(--color-primary)]">{selectedStudent.name}</div>
-            <div className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
+            <div className="text-[13px] text-[var(--color-text-muted)]">当前学生</div>
+            <div className="mt-0.5 text-base font-semibold text-[var(--color-primary)]">{selectedStudent.name}</div>
+            <div className="mt-0.5 text-[13px] text-[var(--color-text-muted)]">
               日程展示的是所选老师的全部日程
             </div>
           </div>
         ) : null}
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center gap-3 border-b border-[var(--color-border)] bg-white px-4 py-2.5">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="relative z-20 flex shrink-0 items-center gap-3 border-b border-[var(--color-border)] bg-white px-4 py-2.5">
           <div className="flex items-center gap-1.5">
             <div
               className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
@@ -1040,7 +1147,7 @@ export function TeacherScheduleBoard() {
                 const next = teacherOptions.find((teacher) => (teacher.id || teacher.name) === eventObject.target.value)
                 if (next) setSelectedTeacher(next)
               }}
-              className="rounded-lg border border-[var(--color-border)] bg-white py-1 pl-2 pr-6 text-sm outline-none focus:border-[var(--color-primary)]"
+              className="rounded-lg border border-[var(--color-border)] bg-white py-1.5 pl-2.5 pr-6 text-[15px] outline-none focus:border-[var(--color-primary)]"
             >
               {teacherOptions.map((teacher) => (
                 <option key={teacher.id || teacher.name} value={teacher.id || teacher.name}>
@@ -1060,7 +1167,7 @@ export function TeacherScheduleBoard() {
                 <polyline points="15 18 9 12 15 6" />
               </svg>
             </button>
-            <span className="min-w-[160px] text-center text-sm font-medium text-[var(--color-text-primary)]">{navLabel}</span>
+            <span className="min-w-[180px] text-center text-base font-medium text-[var(--color-text-primary)]">{navLabel}</span>
             <button
               type="button"
               onClick={goForward}
@@ -1075,7 +1182,7 @@ export function TeacherScheduleBoard() {
           <div className="flex-1" />
 
           {selectedStudent ? (
-            <div className="rounded-full bg-[var(--color-primary-light)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-primary)]">
+            <div className="rounded-full bg-[var(--color-primary-light)] px-3 py-1.5 text-[13px] font-semibold text-[var(--color-primary)]">
               {selectedStudent.name}
             </div>
           ) : null}
@@ -1085,7 +1192,7 @@ export function TeacherScheduleBoard() {
               type="button"
               onClick={() => setShowRecords((value) => !value)}
               className={[
-                'flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-sm font-medium transition-colors',
+                'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[15px] font-medium transition-colors',
                 showRecords
                   ? 'border-[var(--color-primary)] bg-[var(--color-primary-light)] text-[var(--color-primary)]'
                   : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]',
@@ -1093,7 +1200,7 @@ export function TeacherScheduleBoard() {
             >
               排课记录
               {scheduleRecords.length > 0 ? (
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--color-primary)] text-[11px] font-bold text-white">
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-primary)] px-1 text-[12px] font-bold text-white">
                   {scheduleRecords.length}
                 </span>
               ) : null}
@@ -1150,7 +1257,7 @@ export function TeacherScheduleBoard() {
                 type="button"
                 onClick={() => setView(mode)}
                 className={[
-                  'rounded-md px-3 py-1 text-sm font-medium transition-colors',
+                  'rounded-md px-3.5 py-1.5 text-[15px] font-medium transition-colors',
                   view === mode
                     ? 'bg-white text-[var(--color-primary)] shadow-sm'
                     : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]',
@@ -1162,7 +1269,7 @@ export function TeacherScheduleBoard() {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-hidden bg-white">
+        <div className="relative z-0 flex min-h-0 flex-1 overflow-hidden bg-white">
           {error ? (
             <div className="flex h-full items-center justify-center text-sm text-[#d96b4d]">{error}</div>
           ) : loading ? (

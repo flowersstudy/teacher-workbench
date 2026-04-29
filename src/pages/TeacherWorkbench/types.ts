@@ -3,7 +3,7 @@ export type TaskKey =
   | 'pendingReply'
   | 'abnormalUser'
   | 'pendingReview'
-  | 'pendingLeave'
+  | 'pendingReport'
   | 'pendingAssign'
   | 'pendingLink'
   | 'liveDrill'
@@ -46,6 +46,9 @@ export interface TaskListItem {
   linkType?: 'live' | 'replay'
   courseType?: 'diagnose' | 'consensus' | 'correction'
   pointName?: string
+  reportCategory?: 'diagnose' | 'checkpoint' | 'drill'
+  stageKey?: string
+  taskId?: string
   feedbackId?: string
   presetCheckpoints?: string[]
   preferredTeacherId?: string
@@ -58,6 +61,7 @@ export interface CalEvent {
   endTime: string    // HH:mm
   title: string
   type: 'class' | 'meeting'
+  studentId?: string
   link?: string
 }
 

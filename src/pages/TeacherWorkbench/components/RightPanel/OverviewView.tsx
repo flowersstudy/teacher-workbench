@@ -155,7 +155,7 @@ export function OverviewView() {
         : 0
       const pendingReviews = answers.filter((answer) => answer.status === 'pending').length
       const nextEvent = calendarEvents
-        .filter((event) => event.title.includes(student.name))
+        .filter((event) => event.studentId === student.id || event.title.includes(student.name))
         .filter((event) => {
           const start = parseDateTime(`${event.date}T${event.startTime || '00:00'}:00`)
           return start ? start.getTime() >= Date.now() : false
@@ -284,7 +284,7 @@ export function OverviewView() {
           <SummaryCard title="学员总数" value={students.length} hint="当前带教名下学员" />
           <SummaryCard title="待批改" value={taskCounts.pendingReview} hint="来自真实提交记录" />
           <SummaryCard title="待分配" value={taskCounts.pendingAssign} hint="来自分配任务接口" />
-          <SummaryCard title="待请假审批" value={taskCounts.pendingLeave} hint="来自请假列表接口" />
+          <SummaryCard title="待上传报告" value={taskCounts.pendingReport} hint="来自学习路径报告节点" />
           <SummaryCard title="异常学员" value={abnormalStudents.length} hint="来自异常学员接口" />
           <SummaryCard title="近期开课" value={upcomingEvents.length} hint="未来课程排期" />
         </div>

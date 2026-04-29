@@ -1,5 +1,5 @@
 import { AppTabs } from '../../../../components/ui/AppTabs'
-import { ENABLE_OVERVIEW_TAB, ENABLE_SCHEDULING_TAB } from '../../config/launch'
+import { ENABLE_OVERVIEW_TAB } from '../../config/launch'
 import { useWorkbenchStore } from '../../store/workbenchStore'
 import { CalendarView } from './CalendarView'
 import { ChatView } from './ChatView'
@@ -25,7 +25,7 @@ const navItems = [
   { key: 'dashboard', label: '数据后台' },
   { key: 'mailbox', label: '校长信箱' },
   ...(ENABLE_OVERVIEW_TAB ? [{ key: 'overview', label: '总览' as const }] : []),
-  ...(ENABLE_SCHEDULING_TAB ? [{ key: 'scheduling', label: '去排课' as const }] : []),
+  { key: 'scheduling', label: '去排课' },
 ] as const
 
 export function RightPanel() {
@@ -37,11 +37,11 @@ export function RightPanel() {
 
   const navValue =
     rightTab === 'schedule' ? 'schedule'
+    : rightTab === 'scheduling' ? 'scheduling'
     : rightTab === 'students' ? 'students'
     : rightTab === 'dashboard' ? 'dashboard'
     : rightTab === 'mailbox' ? 'mailbox'
     : rightTab === 'overview' && ENABLE_OVERVIEW_TAB ? 'overview'
-    : rightTab === 'scheduling' && ENABLE_SCHEDULING_TAB ? 'scheduling'
     : selectedContactId ? 'chat'
     : 'chatOverview'
 
@@ -66,11 +66,11 @@ export function RightPanel() {
 
             if (
               value === 'schedule'
+              || value === 'scheduling'
               || value === 'students'
               || value === 'dashboard'
               || value === 'mailbox'
               || value === 'overview'
-              || value === 'scheduling'
             ) {
               setRightTab(value)
             }
@@ -86,7 +86,7 @@ export function RightPanel() {
             </div>
             <InspireBar />
           </div>
-        ) : rightTab === 'scheduling' && ENABLE_SCHEDULING_TAB ? (
+        ) : rightTab === 'scheduling' ? (
           <div className="flex h-full flex-col overflow-hidden rounded-[var(--radius-card)]">
             <div className="flex-1 overflow-hidden">
               <TeacherScheduleBoard />
