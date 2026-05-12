@@ -5,7 +5,8 @@ function getToken(): string {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(apiUrl(path), {
+  const requestUrl = apiUrl(path)
+  const res = await fetch(requestUrl, {
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -18,7 +19,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const contentType = res.headers.get('content-type') || ''
 
   if (contentType.includes('text/html') || text.trim().startsWith('<')) {
-    throw new Error(`接口返回了网页，请确认后端服务 https://apix.1v1.buzhi.com 可访问，且前端 dev 服务已重启：${path}`)
+    throw new Error(`接口返回了网页而不是 JSON。状态码: ${res.status}，地址: ${requestUrl}`)
   }
 
   const data = text ? JSON.parse(text) : null
@@ -31,7 +32,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     const message = data && typeof data === 'object' && 'message' in data
       ? String((data as { message?: unknown }).message || '')
       : ''
-    throw new Error(message || `接口请求失败：${res.status}`)
+    throw new Error(message || `接口请求失败：${res.status} ${requestUrl}`)
   }
 
   return data as T

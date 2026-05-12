@@ -8,9 +8,15 @@ import {
   type AssignmentResourceItem,
   type AssignmentTheoryRow,
 } from './assignmentLibrary.generated'
+import {
+  getTheoryKnowledgeTypeForProvince,
+  isResourceRequiredForProvince,
+  isTheoryVisibleForProvince,
+  resolveResourceItemsForProvince,
+} from './assignmentRuleUtils'
 import { useWorkbenchStore } from '../../store/workbenchStore'
 
-type RightTab = 'version' | 'province' | 'course' | 'question' | 'exam'
+type RightTab = 'version' | 'province' | 'theory' | 'training' | 'test'
 type VersionKey = 'standard' | 'express' | 'premium'
 
 type TeacherOption = {
@@ -119,10 +125,13 @@ function isOptionalLearningStatus(status: string) {
   return status.includes('选学')
 }
 
-function getKnowledgeType(row: AssignmentTheoryRow): AssignmentTheoryRow['knowledgeType'] {
+function getKnowledgeType(row: AssignmentTheoryRow, selectedProvince = ''): AssignmentTheoryRow['knowledgeType'] {
   const status = String(row.learningStatusRaw || row.courseStatus || '').trim()
-  if (isOptionalLearningStatus(status)) return 'optional'
-  return row.knowledgeType === 'optional' ? 'optional' : 'required'
+  if (!selectedProvince) {
+    if (isOptionalLearningStatus(status)) return 'optional'
+    return row.knowledgeType === 'optional' ? 'optional' : 'required'
+  }
+  return getTheoryKnowledgeTypeForProvince(row, selectedProvince)
 }
 
 function getKnowledgeDescription(desc: string, knowledgeType: AssignmentTheoryRow['knowledgeType']) {
@@ -137,44 +146,12 @@ function renderResourceTitle(item: AssignmentResourceItem) {
   return item.displayTitle || item.questionTitle || item.rawTitle || '未命名资源'
 }
 
-function uniqueStrings(values: string[]) {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
-}
-
 function inferTeacherRoleFromTitle(title?: string) {
   const value = String(title || '').trim().toLowerCase()
   if (value.includes('诊断') || value.includes('diagnosis')) return 'diagnosis'
   if (value.includes('校长') || value.includes('principal')) return 'principal'
   if (value.includes('学管') || value.includes('manager')) return 'manager'
   return 'coach'
-}
-
-function inferProvinceKeys(...texts: Array<string | undefined>) {
-  const merged = texts.filter(Boolean).join(' ')
-  if (!merged) return []
-  return PROVINCE_CANDIDATES.filter((province) => merged.includes(province))
-}
-
-function getTheoryProvinceKeys(row: AssignmentTheoryRow) {
-  return uniqueStrings(
-    row.provinceKeys.length > 0
-      ? row.provinceKeys
-      : inferProvinceKeys(row.learningStatusRaw, row.theoryTitle, row.noteText, row.knowledgePoint),
-  )
-}
-
-function getResourceProvinceKeys(item: AssignmentResourceItem) {
-  return uniqueStrings(
-    item.provinceKeys.length > 0
-      ? item.provinceKeys
-      : inferProvinceKeys(item.rawTitle, item.questionTitle, item.displayTitle, item.slotKey),
-  )
-}
-
-function matchesProvince(provinceKeys: string[], selectedProvince: string | null) {
-  if (!selectedProvince) return true
-  if (provinceKeys.length === 0) return true
-  return provinceKeys.includes(selectedProvince)
 }
 
 function makeDefaultConfig(checkpointName: string): CheckpointConfig {
@@ -187,6 +164,34 @@ function makeDefaultConfig(checkpointName: string): CheckpointConfig {
     selectedExamIds: [],
     selectedRemedialIds: [],
   }
+}
+
+function buildKnowledgeGroups(library: AssignmentCheckpointLibrary, selectedProvince: string): KnowledgeGroup[] {
+  const filtered = library.theoryRows.filter((row) => isTheoryVisibleForProvince(row, selectedProvince))
+  const grouped = new Map<string, KnowledgeGroup>()
+
+  filtered.forEach((row) => {
+    const key = row.knowledgePoint || row.theoryTitle
+    const knowledgeType = getKnowledgeType(row, selectedProvince)
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        key,
+        title: row.knowledgePoint || row.theoryTitle,
+        rows: [],
+        knowledgeType,
+        desc: getKnowledgeDescription(row.learningStatusRaw || row.courseStatus || '', knowledgeType),
+      })
+    }
+
+    const group = grouped.get(key)!
+    group.rows.push(row)
+    if (knowledgeType === 'required') {
+      group.knowledgeType = 'required'
+      group.desc = getKnowledgeDescription(row.learningStatusRaw || row.courseStatus || '', 'required')
+    }
+  })
+
+  return Array.from(grouped.values())
 }
 
 function getConfigValidationIssues(cfg: CheckpointConfig, library: AssignmentCheckpointLibrary | null): string[] {
@@ -209,20 +214,18 @@ function getConfigValidationIssues(cfg: CheckpointConfig, library: AssignmentChe
     return issues
   }
 
-  const availablePracticeItems = library.practiceItems.filter((item) =>
-    matchesProvince(getResourceProvinceKeys(item), cfg.selectedProvince),
-  )
+  const availablePracticeItems = resolveResourceItemsForProvince(library.practiceItems, cfg.selectedProvince)
   if (availablePracticeItems.length < 3) {
     issues.push(`当前省份可用实训题只有 ${availablePracticeItems.length} 道，至少需要 3 道`)
-  } else if (cfg.selectedQuestionIds.length > 0 && cfg.selectedQuestionIds.length !== 3) {
+  } else if (cfg.selectedQuestionIds.length !== 3) {
     issues.push('实训题需要恰好选择 3 道')
   }
 
-  const availableExamItems = library.examItems.filter((item) =>
-    matchesProvince(getResourceProvinceKeys(item), cfg.selectedProvince),
-  )
+  const availableExamItems = resolveResourceItemsForProvince(library.examItems, cfg.selectedProvince)
   if (availableExamItems.length < 1) {
     issues.push('当前省份没有可用测试题，至少需要 1 道')
+  } else if (cfg.selectedExamIds.length !== 1) {
+    issues.push('正式测试题需要保留 1 道')
   }
 
   return issues
@@ -285,9 +288,11 @@ function CheckboxRow({
   onToggle: () => void
 }) {
   return (
-    <label
+    <button
+      type="button"
+      onClick={onToggle}
       className={[
-        'flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-all',
+        'flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all',
         checked
           ? 'border-[var(--color-primary)] bg-[var(--color-primary-light)]'
           : 'border-[var(--color-border)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-light)]',
@@ -320,8 +325,7 @@ function CheckboxRow({
           </svg>
         ) : null}
       </div>
-      <input type="checkbox" className="sr-only" checked={checked} onChange={onToggle} />
-    </label>
+    </button>
   )
 }
 
@@ -574,45 +578,22 @@ export function AssignStudentModal() {
 
   const knowledgeGroups = useMemo((): KnowledgeGroup[] => {
     if (!currentLibrary || !currentConfig?.selectedProvince) return []
-    const filtered = currentLibrary.theoryRows.filter((r) =>
-      matchesProvince(getTheoryProvinceKeys(r), currentConfig.selectedProvince),
-    )
-    const map = new Map<string, KnowledgeGroup>()
-    filtered.forEach((r) => {
-      const key = r.knowledgePoint || r.theoryTitle
-      if (!map.has(key)) {
-        map.set(key, {
-          key,
-          title: r.knowledgePoint || r.theoryTitle,
-          rows: [],
-          knowledgeType: getKnowledgeType(r),
-          desc: getKnowledgeDescription(r.learningStatusRaw || r.courseStatus || '', getKnowledgeType(r)),
-        })
-      }
-      map.get(key)!.rows.push(r)
-    })
-    return Array.from(map.values())
+    return buildKnowledgeGroups(currentLibrary, currentConfig.selectedProvince)
   }, [currentLibrary, currentConfig?.selectedProvince])
 
   const filteredPractice = useMemo(() => {
     if (!currentLibrary || !currentConfig?.selectedProvince) return []
-    return currentLibrary.practiceItems.filter((r) =>
-      matchesProvince(getResourceProvinceKeys(r), currentConfig!.selectedProvince),
-    )
+    return resolveResourceItemsForProvince(currentLibrary.practiceItems, currentConfig.selectedProvince)
   }, [currentLibrary, currentConfig?.selectedProvince])
 
   const filteredExam = useMemo(() => {
     if (!currentLibrary || !currentConfig?.selectedProvince) return []
-    return currentLibrary.examItems.filter((r) =>
-      matchesProvince(getResourceProvinceKeys(r), currentConfig!.selectedProvince),
-    )
+    return resolveResourceItemsForProvince(currentLibrary.examItems, currentConfig.selectedProvince)
   }, [currentLibrary, currentConfig?.selectedProvince])
 
   const filteredRemedial = useMemo(() => {
     if (!currentLibrary || !currentConfig?.selectedProvince) return []
-    return currentLibrary.remedialItems.filter((r) =>
-      matchesProvince(getResourceProvinceKeys(r), currentConfig!.selectedProvince),
-    )
+    return resolveResourceItemsForProvince(currentLibrary.remedialItems, currentConfig.selectedProvince)
   }, [currentLibrary, currentConfig?.selectedProvince])
 
   const canConfirm =
@@ -642,41 +623,21 @@ export function AssignStudentModal() {
       for (const [sortOrder, name] of selectedCheckpoints.entries()) {
         const cfg = checkpointConfigs.get(name)
         if (!cfg) continue
+        const selectedProvince = cfg.selectedProvince
+        if (!selectedProvince) continue
         const lib = CHECKPOINT_ASSIGNMENT_LIBRARY.find((l) => l.checkpointName === name)
         if (!lib) continue
         const versionObj = versions.find((v) => v.key === cfg.selectedVersion)
-        const provinceObj = DEFAULT_PROVINCES.find((p) => p.key === cfg.selectedProvince)
-        const libKnowledgeGroups: KnowledgeGroup[] = (() => {
-          const filtered = lib.theoryRows.filter((r) =>
-            matchesProvince(getTheoryProvinceKeys(r), cfg.selectedProvince),
-          )
-          const m = new Map<string, KnowledgeGroup>()
-          filtered.forEach((r) => {
-            const key = r.knowledgePoint || r.theoryTitle
-            if (!m.has(key)) {
-              m.set(key, {
-                key,
-                title: r.knowledgePoint || r.theoryTitle,
-                rows: [],
-                knowledgeType: getKnowledgeType(r),
-                desc: getKnowledgeDescription(r.learningStatusRaw || r.courseStatus || '', getKnowledgeType(r)),
-              })
-            }
-            m.get(key)!.rows.push(r)
-          })
-          return Array.from(m.values())
-        })()
+        const provinceObj = DEFAULT_PROVINCES.find((p) => p.key === selectedProvince)
+        const libKnowledgeGroups = buildKnowledgeGroups(lib, selectedProvince)
         const selectedGroups = libKnowledgeGroups.filter((g) => cfg.selectedKnowledgeIds.includes(g.key))
         const selectedTheoryRows = lib.theoryRows.filter((row) => (
           cfg.selectedKnowledgeIds.includes(row.knowledgePoint || row.theoryTitle)
-          && matchesProvince(getTheoryProvinceKeys(row), cfg.selectedProvince)
+          && isTheoryVisibleForProvince(row, selectedProvince)
         ))
-        const availablePracticeItems = lib.practiceItems.filter((item) =>
-          matchesProvince(getResourceProvinceKeys(item), cfg.selectedProvince),
-        )
-        const availableExamItems = lib.examItems.filter((item) =>
-          matchesProvince(getResourceProvinceKeys(item), cfg.selectedProvince),
-        )
+        const availablePracticeItems = resolveResourceItemsForProvince(lib.practiceItems, selectedProvince)
+        const availableExamItems = resolveResourceItemsForProvince(lib.examItems, selectedProvince)
+        const availableRemedialItems = resolveResourceItemsForProvince(lib.remedialItems, selectedProvince)
         const theoryLessons: Array<{
           id: string
           title: string
@@ -703,18 +664,14 @@ export function AssignStudentModal() {
             noteText: row.noteText || '',
             knowledgeId: matchedGroup?.key || row.knowledgePoint || row.theoryTitle,
             knowledgeTitle: matchedGroup?.title || row.knowledgePoint || row.theoryTitle,
-            knowledgeType: matchedGroup?.knowledgeType || getKnowledgeType(row),
+            knowledgeType: matchedGroup?.knowledgeType || getKnowledgeType(row, selectedProvince),
             sourceSheet: row.sourceSheet,
             sourceRow: row.sourceRow,
           })
         })
-        const selectedPracticeItems = availablePracticeItems.filter((item) => cfg.selectedQuestionIds.includes(item.id))
-        const fallbackPracticeItems = availablePracticeItems.filter((item) => !cfg.selectedQuestionIds.includes(item.id))
-        const practiceItems = [...selectedPracticeItems, ...fallbackPracticeItems].slice(0, 3)
-        const examItems = cfg.selectedExamIds.length > 0
-          ? availableExamItems.filter((item) => cfg.selectedExamIds.includes(item.id)).slice(0, 1)
-          : availableExamItems.slice(0, 1)
-        const remedialItems = lib.remedialItems.filter((r) => cfg.selectedRemedialIds.includes(r.id))
+        const practiceItems = availablePracticeItems.filter((item) => cfg.selectedQuestionIds.includes(item.id))
+        const examItems = availableExamItems.filter((item) => cfg.selectedExamIds.includes(item.id)).slice(0, 1)
+        const remedialItems = availableRemedialItems.filter((item) => cfg.selectedRemedialIds.includes(item.id))
         const knowledgeItems = selectedGroups.map((g) => ({
           id: g.key, title: g.title, type: g.knowledgeType, desc: g.desc,
         }))
@@ -724,8 +681,8 @@ export function AssignStudentModal() {
           teacher: selectedTeacher?.id === NO_ASSIGN_TEACHER.id ? null : selectedTeacher,
           version: cfg.selectedVersion!,
           versionName: versionObj?.name ?? cfg.selectedVersion!,
-          province: cfg.selectedProvince!,
-          provinceLabel: provinceObj?.label ?? cfg.selectedProvince!,
+          province: selectedProvince,
+          provinceLabel: provinceObj?.label ?? selectedProvince,
           knowledgeItems,
           theoryLessons,
           practiceIds: cfg.selectedQuestionIds,
@@ -750,23 +707,24 @@ export function AssignStudentModal() {
   const steps: Array<{ key: RightTab; label: string }> = [
     { key: 'version', label: '版本' },
     { key: 'province', label: '省份' },
-    ...(showTheory ? [{ key: 'course' as RightTab, label: '知识点' }] : []),
-    { key: 'question', label: '实训+测试' },
-    { key: 'exam', label: '补考' },
+    ...(showTheory ? [{ key: 'theory' as RightTab, label: '理论' }] : []),
+    { key: 'training', label: '实训' },
+    { key: 'test', label: '测试' },
   ]
 
   const isStepCompleted = (key: RightTab): boolean => {
     if (!currentConfig) return false
     if (key === 'version') return !!currentConfig.selectedVersion
     if (key === 'province') return !!currentConfig.selectedProvince
-    if (key === 'course') return currentConfig.selectedKnowledgeIds.length > 0
-    if (key === 'question') {
+    if (key === 'theory') return currentConfig.selectedKnowledgeIds.length > 0
+    if (key === 'training') {
       if (!currentLibrary || !currentConfig.selectedProvince) return false
-      const practiceReady = currentLibrary.practiceItems.length === 0 || filteredPractice.length >= 3
-      const examReady = currentLibrary.examItems.length === 0 || filteredExam.length >= 1
-      return practiceReady && examReady
+      return currentLibrary.practiceItems.length === 0 || (filteredPractice.length >= 3 && currentConfig.selectedQuestionIds.length === 3)
     }
-    if (key === 'exam') return currentConfig.selectedRemedialIds.length > 0
+    if (key === 'test') {
+      if (!currentLibrary || !currentConfig.selectedProvince) return false
+      return currentLibrary.examItems.length === 0 || (filteredExam.length >= 1 && currentConfig.selectedExamIds.length === 1)
+    }
     return false
   }
 
@@ -799,7 +757,6 @@ export function AssignStudentModal() {
                     key={cp.name}
                     checked={selectedCheckpoints.includes(cp.name)}
                     title={cp.name}
-                    subtitle={cp.desc}
                     badge={cp.tag}
                     onToggle={() => toggleCheckpoint(cp.name)}
                   />
@@ -808,9 +765,6 @@ export function AssignStudentModal() {
             </div>
             <div>
               <div className="mb-2 text-xs font-semibold text-[var(--color-text-muted)]">选择带教老师</div>
-              <div className="mb-2 text-[11px] leading-5 text-[var(--color-text-muted)]">
-                这里设置的是该学生的全局带教老师，修改后会同步作用到这个学生的所有卡点。
-              </div>
               <div className="flex flex-col gap-2">
                 {teachers.length === 0 ? (
                   <EmptyState text="暂无老师数据" />
@@ -951,29 +905,26 @@ export function AssignStudentModal() {
                           type="button"
                           onClick={() => {
                             if (!activeCheckpointTab || !currentLibrary) return
-                            const filtered = currentLibrary.theoryRows.filter((r) =>
-                              matchesProvince(getTheoryProvinceKeys(r), p.key),
-                            )
-                            const map = new Map<string, KnowledgeGroup>()
-                            filtered.forEach((r) => {
-                              const key = r.knowledgePoint || r.theoryTitle
-                              if (!map.has(key)) {
-                                map.set(key, {
-                                  key,
-                                  title: r.knowledgePoint || r.theoryTitle,
-                                  rows: [],
-                                  knowledgeType: getKnowledgeType(r),
-                                  desc: getKnowledgeDescription(r.learningStatusRaw || r.courseStatus || '', getKnowledgeType(r)),
-                                })
-                              }
-                              map.get(key)!.rows.push(r)
-                            })
-                            const requiredIds = Array.from(map.values())
+                            const groups = buildKnowledgeGroups(currentLibrary, p.key)
+                            const requiredIds = groups
                               .filter((g) => g.knowledgeType === 'required')
                               .map((g) => g.key)
+                            const practiceItems = resolveResourceItemsForProvince(currentLibrary.practiceItems, p.key)
+                            const examItems = resolveResourceItemsForProvince(currentLibrary.examItems, p.key)
+                            const remedialItems = resolveResourceItemsForProvince(currentLibrary.remedialItems, p.key)
                             updateConfig(activeCheckpointTab, {
                               selectedProvince: p.key,
                               selectedKnowledgeIds: requiredIds,
+                              selectedQuestionIds: practiceItems
+                                .filter((item) => isResourceRequiredForProvince(item, p.key))
+                                .map((item) => item.id),
+                              selectedExamIds: examItems
+                                .filter((item) => isResourceRequiredForProvince(item, p.key))
+                                .slice(0, 1)
+                                .map((item) => item.id),
+                              selectedRemedialIds: remedialItems
+                                .filter((item) => isResourceRequiredForProvince(item, p.key))
+                                .map((item) => item.id),
                             })
                           }}
                           className={[
@@ -989,10 +940,10 @@ export function AssignStudentModal() {
                     </div>
                   )}
 
-                  {activeTab === 'course' && showTheory && (
+                  {activeTab === 'theory' && showTheory && (
                     <div className="flex flex-col gap-2">
                       {knowledgeGroups.length === 0 ? (
-                        <EmptyState text="请先选择省份" />
+                        <EmptyState text={currentConfig?.selectedProvince ? '当前省份暂无理论内容' : '请先选择省份'} />
                       ) : (
                         knowledgeGroups.map((g) => (
                           <CheckboxRow
@@ -1016,11 +967,8 @@ export function AssignStudentModal() {
                     </div>
                   )}
 
-                  {activeTab === 'question' && (
+                  {activeTab === 'training' && (
                     <div className="flex flex-col gap-2">
-                      <div className="rounded-xl bg-[var(--color-page-bg)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
-                        默认自动带出 3 道实训题和 1 道测试题，也可以手动调整。
-                      </div>
                       <div className="mt-1 text-xs font-semibold text-[var(--color-text-muted)]">实训题（3题）</div>
                       {filteredPractice.length === 0 ? (
                         <EmptyState text="当前卡点暂无实训题资源" />
@@ -1030,7 +978,7 @@ export function AssignStudentModal() {
                             key={item.id}
                             checked={currentConfig?.selectedQuestionIds.includes(item.id) ?? false}
                             title={renderResourceTitle(item)}
-                            subtitle={item.slotKey || undefined}
+                            subtitle={item.slotLabel || undefined}
                             onToggle={() => {
                               if (!activeCheckpointTab || !currentConfig) return
                               const ids = currentConfig.selectedQuestionIds
@@ -1047,7 +995,15 @@ export function AssignStudentModal() {
                           />
                         ))
                       )}
-                      <div className="mt-3 text-xs font-semibold text-[var(--color-text-muted)]">测试题（1题）</div>
+                    </div>
+                  )}
+
+                  {activeTab === 'test' && (
+                    <div className="flex flex-col gap-2">
+                      <div className="rounded-xl bg-[var(--color-page-bg)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
+                        这里同时展示正式测试和选学 / 补考测试。
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-[var(--color-text-muted)]">测试题（1题）</div>
                       {filteredExam.length === 0 ? (
                         <EmptyState text="当前卡点暂无测试题资源" />
                       ) : (
@@ -1056,7 +1012,7 @@ export function AssignStudentModal() {
                             key={item.id}
                             checked={currentConfig?.selectedExamIds.includes(item.id) ?? false}
                             title={renderResourceTitle(item)}
-                            subtitle={item.slotKey || undefined}
+                            subtitle={item.slotLabel || undefined}
                             onToggle={() => {
                               if (!activeCheckpointTab || !currentConfig) return
                               updateConfig(activeCheckpointTab, {
@@ -1066,20 +1022,16 @@ export function AssignStudentModal() {
                           />
                         ))
                       )}
-                    </div>
-                  )}
-
-                  {activeTab === 'exam' && (
-                    <div className="flex flex-col gap-2">
+                      <div className="mt-3 text-xs font-semibold text-[var(--color-text-muted)]">选学 / 补考测试</div>
                       {filteredRemedial.length === 0 ? (
-                        <EmptyState text="该卡点暂无补考资源" />
+                        <EmptyState text="当前卡点暂无选学 / 补考测试资源" />
                       ) : (
                         filteredRemedial.map((item) => (
                           <CheckboxRow
                             key={item.id}
                             checked={currentConfig?.selectedRemedialIds.includes(item.id) ?? false}
                             title={renderResourceTitle(item)}
-                            subtitle={item.slotKey || undefined}
+                            subtitle={item.slotLabel || undefined}
                             onToggle={() => {
                               if (!activeCheckpointTab || !currentConfig) return
                               const ids = currentConfig.selectedRemedialIds

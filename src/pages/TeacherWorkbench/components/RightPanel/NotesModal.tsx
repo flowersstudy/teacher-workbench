@@ -50,8 +50,8 @@ export function NotesModal({ contactName }: { contactName: string }) {
     >
       <div className="absolute inset-0 bg-black/30" />
       <div
-        className="relative flex w-[360px] flex-col rounded-[var(--radius-card)] bg-white shadow-lg"
-        style={{ maxHeight: 480 }}
+        className="relative flex w-[min(520px,94vw)] flex-col rounded-[var(--radius-card)] bg-white shadow-lg"
+        style={{ maxHeight: 640 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

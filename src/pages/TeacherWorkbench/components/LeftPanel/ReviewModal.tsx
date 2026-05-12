@@ -225,6 +225,7 @@ function submissionToReviewItem(s: Submission, idx: number, reviewContactIdByNam
 
   return {
     id: s.id,
+    studentId: s.student_id,
     name: s.student_name,
     avatar: s.student_name.slice(-1),
     color: AVATAR_COLORS[colorIdx],
@@ -236,11 +237,12 @@ function submissionToReviewItem(s: Submission, idx: number, reviewContactIdByNam
     stageKey,
     taskId,
     stageLabel: getSubmissionStageLabel(stageKey),
-    taskLabel: getSubmissionTaskLabel(taskId, s.file_name),
+    taskLabel: getSubmissionTaskLabel(taskId, s.file_name, s.task_label),
     deadline: s.deadline,
     priority: s.priority,
     submittedAt: s.submitted_at,
     submittedNormal: s.submitted_normal === 1,
+    fileKind: s.file_kind,
   }
 }
 
@@ -304,7 +306,7 @@ export function ReviewModal() {
         <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={close}>
           <div className="absolute inset-0 bg-black/30" />
           <div
-            className="relative flex w-[min(760px,90vw)] max-h-[82vh] flex-col overflow-hidden rounded-[var(--radius-card)] bg-white shadow-lg"
+            className="relative flex w-[50vw] max-w-[96vw] max-h-[90vh] flex-col overflow-hidden rounded-[var(--radius-card)] bg-white shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">

@@ -1,8 +1,10 @@
-import { createPortal } from 'react-dom'
+﻿import { createPortal } from 'react-dom'
 import { useState } from 'react'
 import type { TaskListItem } from '../../types'
 import { taskMeta } from '../../config/taskConfig'
 import { useWorkbenchStore } from '../../store/workbenchStore'
+
+const REPORT_CATEGORY_STORAGE_KEY = 'teacher_workbench_pending_report_category'
 
 function ItemAvatar({ avatar, color }: { avatar: string; color: string }) {
   return (
@@ -93,12 +95,20 @@ export function TaskModal() {
   const selectContact = useWorkbenchStore((s) => s.selectContact)
   const openLinkUpload = useWorkbenchStore((s) => s.openLinkUpload)
   const openHandoutUpload = useWorkbenchStore((s) => s.openHandoutUpload)
+  const openReportUpload = useWorkbenchStore((s) => s.openReportUpload)
   const openStudentProfile = useWorkbenchStore((s) => s.openStudentProfile)
   const openAssignStudent = useWorkbenchStore((s) => s.openAssignStudent)
   const taskItemsMap = useWorkbenchStore((s) => s.taskItemsMap)
   const [linkTab, setLinkTab] = useState<'live' | 'replay'>('live')
+  const [reportTab, setReportTab] = useState<'diagnose' | 'checkpoint' | 'drill'>(() => {
+    if (typeof window === 'undefined') return 'checkpoint'
+    const stored = window.localStorage.getItem(REPORT_CATEGORY_STORAGE_KEY)
+    return stored === 'diagnose' || stored === 'checkpoint' || stored === 'drill'
+      ? stored
+      : 'checkpoint'
+  })
 
-  if (!openTaskKey || openTaskKey === 'pendingReview' || openTaskKey === 'abnormalUser' || openTaskKey === 'pendingFeedback' || openTaskKey === 'liveDrill') {
+  if (!openTaskKey || openTaskKey === 'pendingReview' || openTaskKey === 'abnormalUser' || openTaskKey === 'pendingFeedback' || openTaskKey === 'liveDrill' || openTaskKey === 'pendingDiagnosePaper') {
     return null
   }
 
@@ -116,7 +126,7 @@ export function TaskModal() {
 
     if (openTaskKey === 'pendingReport' && item.studentId) {
       close()
-      openStudentProfile(item.studentId, item.pointName)
+      openReportUpload(item)
       return
     }
 
@@ -144,6 +154,13 @@ export function TaskModal() {
     { key: 'drill', label: '刷题报告' },
   ]
 
+  function handleSelectReportTab(tab: 'diagnose' | 'checkpoint' | 'drill') {
+    setReportTab(tab)
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(REPORT_CATEGORY_STORAGE_KEY, tab)
+    }
+  }
+
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
@@ -153,7 +170,7 @@ export function TaskModal() {
     >
       <div className="absolute inset-0 bg-black/30" />
       <div
-        className="relative max-h-[80vh] w-[min(680px,90vw)] overflow-hidden rounded-[var(--radius-card)] bg-white shadow-lg"
+        className="relative max-h-[86vh] w-[50vw] max-w-[96vw] overflow-hidden rounded-[var(--radius-card)] bg-white shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
@@ -185,9 +202,27 @@ export function TaskModal() {
               </button>
             ))}
           </div>
+        ) : openTaskKey === 'pendingReport' ? (
+          <div className="flex border-b border-[var(--color-border)] px-4">
+            {reportGroups.map((group) => (
+              <button
+                key={group.key}
+                type="button"
+                onClick={() => handleSelectReportTab(group.key)}
+                className={[
+                  'mr-4 border-b-2 py-2 text-xs font-semibold transition-colors',
+                  reportTab === group.key
+                    ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
+                    : 'border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]',
+                ].join(' ')}
+              >
+                {group.label}
+              </button>
+            ))}
+          </div>
         ) : null}
 
-        <div className="max-h-[calc(80vh-52px)] overflow-auto p-2">
+        <div className="max-h-[calc(86vh-52px)] overflow-auto p-2">
           {openTaskKey === 'pendingLink' ? (
             pendingLinkItems.length > 0 ? (
               ([
@@ -210,14 +245,19 @@ export function TaskModal() {
             )
           ) : openTaskKey === 'pendingReport' ? (
             pendingReportItems.length > 0 ? (
-              reportGroups.map((group) => (
-                <SectionGroup
-                  key={group.key}
-                  title={group.label}
-                  items={pendingReportItems.filter((item) => item.reportCategory === group.key)}
-                  onAction={handleDefaultAction}
-                />
-              ))
+              pendingReportItems.filter((item) => (item.reportCategory || 'checkpoint') === reportTab).length > 0 ? (
+                <div className="space-y-1">
+                  {pendingReportItems
+                    .filter((item) => (item.reportCategory || 'checkpoint') === reportTab)
+                    .map((item) => (
+                      <ItemRow key={item.id} item={item} onAction={handleDefaultAction} />
+                    ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center text-xs text-[var(--color-text-muted)]">
+                  当前分类下没有待上传报告
+                </div>
+              )
             ) : (
               <div className="py-8 text-center text-xs text-[var(--color-text-muted)]">当前没有待上传报告</div>
             )
@@ -240,3 +280,4 @@ export function TaskModal() {
     document.body,
   )
 }
+

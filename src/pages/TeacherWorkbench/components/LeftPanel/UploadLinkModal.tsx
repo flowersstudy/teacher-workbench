@@ -86,7 +86,7 @@ export function UploadLinkModal() {
     >
       <div className="absolute inset-0 bg-black/30" />
       <div
-        className="relative w-[380px] rounded-[var(--radius-card)] bg-white shadow-lg"
+        className="relative w-[min(560px,94vw)] rounded-[var(--radius-card)] bg-white shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">

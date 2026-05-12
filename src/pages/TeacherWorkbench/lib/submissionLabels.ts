@@ -100,8 +100,13 @@ export function getSubmissionStageLabel(stageKey = ''): string {
   return getSubmissionStageMeta(stageKey).label
 }
 
-export function getSubmissionTaskLabel(taskId = '', fileName = ''): string {
+export function getSubmissionTaskLabel(taskId = '', fileName = '', taskLabel = ''): string {
   const safeTaskId = String(taskId || '').trim()
+  const safeTaskLabel = String(taskLabel || '').trim()
+
+  if (safeTaskLabel) {
+    return safeTaskLabel
+  }
 
   if (EXACT_TASK_LABELS[safeTaskId]) {
     return EXACT_TASK_LABELS[safeTaskId]
@@ -110,13 +115,13 @@ export function getSubmissionTaskLabel(taskId = '', fileName = ''): string {
   const trainingMatch = safeTaskId.match(/^training_round_(\d+)_(homework|reflection)_upload$/)
   if (trainingMatch) {
     return trainingMatch[2] === 'homework'
-      ? `实训第 ${trainingMatch[1]} 轮作业`
-      : `实训第 ${trainingMatch[1]} 轮心得`
+      ? `实训第${trainingMatch[1]}轮作业`
+      : `实训第${trainingMatch[1]}轮心得`
   }
 
   const examMatch = safeTaskId.match(/^exam(?:_round|_remedial)?_(\d+)_homework_upload$/)
   if (examMatch) {
-    return `考试第 ${examMatch[1]} 轮作业`
+    return `考试第${examMatch[1]}轮作业`
   }
 
   if (safeTaskId.endsWith('_upload')) {

@@ -11,6 +11,7 @@ export const ENABLED_TASK_KEYS = [
   'pendingReview',
   'pendingReport',
   'pendingAssign',
+  'pendingDiagnosePaper',
   'pendingLink',
   'liveDrill',
   'pendingHandout',

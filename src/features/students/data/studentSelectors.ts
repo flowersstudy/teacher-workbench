@@ -10,8 +10,20 @@ function colorFromName(name: string) {
 
 function matchTeacherRole(role: string | undefined, expected: 'teaching' | 'diagnosis') {
   if (!role) return false
+  if (expected === 'teaching' && role === 'coach') return true
+  if (expected === 'diagnosis' && role === 'diagnosis') return true
   if (expected === 'teaching') return role.includes('带教')
   return role.includes('诊断')
+}
+
+function roleLabel(role: string | undefined) {
+  if (!role) return '老师'
+  if (role === 'coach') return '带教老师'
+  if (role === 'diagnosis') return '诊断老师'
+  if (role === 'drill') return '刷题老师'
+  if (role === 'manager') return '学管老师'
+  if (role === 'principal') return '校长'
+  return role
 }
 
 export function getAllStudents(apiStudents: StudentItem[]) {
@@ -55,7 +67,8 @@ export function getTeacherProfile(teacherName: string): TeacherProfile | undefin
 
   teamTeachers.forEach((teacher) => {
     if (teacher.name === teacherName && teacher.role) {
-      roleCounts.set(teacher.role, (roleCounts.get(teacher.role) ?? 0) + 1)
+      const label = roleLabel(teacher.role)
+      roleCounts.set(label, (roleCounts.get(label) ?? 0) + 1)
     }
   })
   relatedStudents.forEach((student) => {

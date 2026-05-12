@@ -23,11 +23,24 @@ export interface ReviewPointStatus {
   status: ReviewPointStatusValue
 }
 
+export interface ReviewLossPointRate {
+  lossPointKey: number
+  reason?: string
+  description: string
+  checkpointName: string
+  standard: number
+  currentRate: number | null
+  sourceType?: 'diagnosis' | 'monthly_review'
+  sortOrder?: number
+  updatedAt?: string
+}
+
 export interface ReviewOverview {
   targetExam: string | null
   progress: ReviewProgress
   pointRates: ReviewPointRate[]
   pointStatuses?: ReviewPointStatus[]
+  lossPointRates?: ReviewLossPointRate[]
 }
 
 export interface PointLearningDayRecord {

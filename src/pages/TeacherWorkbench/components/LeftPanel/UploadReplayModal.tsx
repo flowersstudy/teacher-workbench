@@ -4,6 +4,10 @@ import { useWorkbenchStore } from '../../store/workbenchStore'
 
 type ReplayCategory = '诊断课' | '卡点课'
 
+function isHttpUrl(value: string): boolean {
+  return /^https?:\/\/\S+$/i.test(value.trim())
+}
+
 export function UploadReplayModal() {
   const item = useWorkbenchStore((s) => s.replayUploadItem)
   const close = useWorkbenchStore((s) => s.closeReplayUpload)
@@ -15,11 +19,17 @@ export function UploadReplayModal() {
 
   if (!item) return null
 
+  const eventId = item.eventId
+  const trimmedLink = link.trim()
+  const hasLink = trimmedLink.length > 0
+  const linkInvalid = hasLink && !isHttpUrl(trimmedLink)
+
   async function handleSubmit() {
-    if (!link.trim() || !item?.eventId) return
+    if (!hasLink || linkInvalid || !eventId) return
+
     setSubmitting(true)
     try {
-      await uploadReplayMaterial(item.eventId, category, link.trim())
+      await uploadReplayMaterial(eventId, category, trimmedLink)
       setSubmitted(true)
       setTimeout(() => {
         setSubmitted(false)
@@ -40,39 +50,42 @@ export function UploadReplayModal() {
     >
       <div className="absolute inset-0 bg-black/30" />
       <div
-        className="relative w-[380px] rounded-[var(--radius-card)] bg-white shadow-lg"
+        className="relative w-[min(560px,94vw)] rounded-[var(--radius-card)] bg-white shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
-          <div className="text-sm font-semibold text-[var(--color-text-primary)]">上传课程回放</div>
+          <div className="text-sm font-semibold text-[var(--color-text-primary)]">上传课程录播</div>
           <button
             type="button"
             onClick={close}
-            className="rounded px-2 py-1 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-primary-light)]"
+            className="rounded px-2 py-1 text-sm text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-primary-light)]"
           >
-            ✕
+            关闭
           </button>
         </div>
 
-        <div className="p-4 space-y-4">
+        <div className="space-y-4 p-4">
           <div className="rounded-lg bg-[var(--color-bg-left)] px-3 py-2">
             <div className="text-xs text-[var(--color-text-secondary)]">课次</div>
             <div className="mt-0.5 text-sm font-medium text-[var(--color-text-primary)]">{item.name}</div>
           </div>
 
-          {/* 课程分类 */}
           <div>
-            <div className="mb-1.5 text-xs font-medium text-[var(--color-text-secondary)]">回放类型</div>
+            <div className="mb-1.5 text-xs font-medium text-[var(--color-text-secondary)]">录播类型</div>
             <div className="flex overflow-hidden rounded-lg border border-[var(--color-border)]">
-              {(['诊断课', '卡点课'] as ReplayCategory[]).map((c) => (
-                <button key={c} type="button" onClick={() => setCategory(c)}
+              {(['诊断课', '卡点课'] as ReplayCategory[]).map((currentCategory) => (
+                <button
+                  key={currentCategory}
+                  type="button"
+                  onClick={() => setCategory(currentCategory)}
                   className={[
                     'flex-1 py-1.5 text-xs font-medium transition-colors',
-                    category === c
+                    category === currentCategory
                       ? 'bg-[var(--color-primary)] text-white'
                       : 'bg-white text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-left)]',
-                  ].join(' ')}>
-                  {c}回放
+                  ].join(' ')}
+                >
+                  {currentCategory}录播
                 </button>
               ))}
             </div>
@@ -80,49 +93,48 @@ export function UploadReplayModal() {
 
           <div>
             <div className="mb-1.5 text-xs font-medium text-[var(--color-text-secondary)]">
-              第一步：前往腾讯会议云录制，复制回放链接
+              第一步：在保利威后台找到对应录播，复制学生可访问的播放链接
             </div>
-            <a
-              href="https://meeting.tencent.com/user-center/record"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white hover:bg-[var(--color-primary-dark)] transition-colors"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <polygon points="10 8 16 12 10 16 10 8" />
-              </svg>
-              打开云录制
-            </a>
+            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-left)] px-3 py-2 text-xs leading-5 text-[var(--color-text-secondary)]">
+              这里填写的是保利威录播链接，不是腾讯会议回放链接。
+            </div>
           </div>
 
           <div>
             <div className="mb-1.5 text-xs font-medium text-[var(--color-text-secondary)]">
-              第二步：将回放链接粘贴到此处，发给学生
+              第二步：将录播链接粘贴到此处，学生端“去回顾”会按保利威录播打开
             </div>
             <input
               type="text"
               value={link}
               onChange={(e) => setLink(e.target.value)}
-              placeholder="粘贴回放链接…"
-              className="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs outline-none focus:border-[var(--color-primary)] transition-colors"
+              placeholder="粘贴保利威录播链接，例如 https://..."
+              className="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs outline-none transition-colors focus:border-[var(--color-primary)]"
             />
+            <div className="mt-1 text-[10px] text-[var(--color-text-muted)]">
+              需要完整的 `http` 或 `https` 链接。
+            </div>
+            {linkInvalid && (
+              <div className="mt-1 text-[10px] text-red-500">
+                录播链接必须是完整的 http 或 https 地址
+              </div>
+            )}
           </div>
 
           <button
             type="button"
             onClick={() => void handleSubmit()}
-            disabled={!link.trim() || submitted || submitting}
+            disabled={!hasLink || linkInvalid || submitted || submitting}
             className={[
               'w-full rounded-lg py-2 text-sm font-semibold transition-colors',
               submitted
                 ? 'bg-green-500 text-white'
-                : link.trim()
+                : hasLink && !linkInvalid
                   ? 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)]'
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed',
+                  : 'cursor-not-allowed bg-gray-100 text-gray-400',
             ].join(' ')}
           >
-            {submitted ? '上传成功 ✓' : submitting ? '上传中…' : '确认上传'}
+            {submitted ? '上传成功' : submitting ? '上传中...' : '确认上传'}
           </button>
         </div>
       </div>

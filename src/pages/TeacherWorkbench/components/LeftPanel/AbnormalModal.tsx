@@ -134,7 +134,7 @@ export function AbnormalModal() {
     <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={close}>
       <div className="absolute inset-0 bg-black/30" />
       <div
-        className="relative flex max-h-[80vh] w-[min(680px,90vw)] flex-col overflow-hidden rounded-[var(--radius-card)] bg-[var(--color-bg-left)] shadow-lg"
+        className="relative flex max-h-[86vh] w-[50vw] max-w-[96vw] flex-col overflow-hidden rounded-[var(--radius-card)] bg-[var(--color-bg-left)] shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-white px-4 py-3">

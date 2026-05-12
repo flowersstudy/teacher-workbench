@@ -1,4 +1,4 @@
-import { createPortal } from 'react-dom'
+﻿import { createPortal } from 'react-dom'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
@@ -538,7 +538,11 @@ const StudentPdfPanel = forwardRef<StudentPdfPanelHandle, { item: ReviewItem }>(
         blobUrlRef.current = url
         annotationMapRef.current = {}
         renderSizeMapRef.current = {}
-        const nextPreviewKind = getSubmissionFileKind(item.fileName, blob.type)
+        const hintedPreviewKind = item.fileKind || 'other'
+        const detectedPreviewKind = getSubmissionFileKind(item.fileName, blob.type)
+        const nextPreviewKind = detectedPreviewKind === 'other' && hintedPreviewKind !== 'other'
+          ? hintedPreviewKind
+          : detectedPreviewKind
         setPreviewKind(nextPreviewKind)
 
         if (nextPreviewKind === 'pdf') {
@@ -555,7 +559,7 @@ const StudentPdfPanel = forwardRef<StudentPdfPanelHandle, { item: ReviewItem }>(
           return
         }
 
-        setPdfError('褰撳墠鎻愪氦鏂囦欢鏆備笉鏀寔棰勮')
+        setPdfError('当前提交文件暂不支持预览')
       })
       .catch(() => { if (!cancelled) setPdfError('无法加载学生提交文件') })
       .finally(() => { if (!cancelled) setPdfLoading(false) })

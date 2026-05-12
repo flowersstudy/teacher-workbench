@@ -222,7 +222,7 @@ export function StudentFeedbackModal() {
     >
       <div className="absolute inset-0 bg-black/30" />
       <div
-        className="relative grid h-[min(800px,88vh)] w-[min(1180px,94vw)] grid-cols-[390px_minmax(0,1fr)] overflow-hidden rounded-[var(--radius-card)] bg-white shadow-lg"
+        className="relative grid h-[min(880px,92vh)] w-[50vw] max-w-[96vw] grid-cols-[430px_minmax(0,1fr)] overflow-hidden rounded-[var(--radius-card)] bg-white shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="min-h-0 border-r border-[var(--color-border)]">

@@ -33,6 +33,9 @@ const HOUR_COUNT = HOUR_END - HOUR_START
 const DEFAULT_VISIBLE_HOUR = 9
 const VISIBLE_HOUR_COUNT = 12
 const FALLBACK_HOUR_HEIGHT = 60
+const TIMELINE_LABEL_WIDTH = 64
+const COLUMN_DIVIDER_CLASS = 'border-[#d7e0ea]'
+const TIMELINE_DIVIDER_CLASS = 'border-[#d1dae6] shadow-[1px_0_0_0_#e6edf5]'
 const DAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 const HOURS = Array.from({ length: HOUR_COUNT }, (_, index) => HOUR_START + index)
 
@@ -164,7 +167,7 @@ function EventModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/25" />
       <div
-        className="relative w-[360px] rounded-[var(--radius-card)] bg-white shadow-lg"
+        className="relative w-[min(560px,94vw)] rounded-[var(--radius-card)] bg-white shadow-lg"
         onClick={(eventObject) => eventObject.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
@@ -300,7 +303,7 @@ function EventBlock({
   return (
     <button
       type="button"
-      className="absolute left-0.5 right-0.5 overflow-hidden rounded-md px-2 py-1.5 text-left text-white hover:brightness-95"
+      className="absolute left-0.5 right-0.5 z-20 overflow-hidden rounded-md px-2 py-1.5 text-left text-white hover:brightness-95"
       style={{ top: layout.top, height: layout.height, backgroundColor: background, opacity: 0.92 }}
       onClick={(eventObject) => {
         eventObject.stopPropagation()
@@ -364,16 +367,21 @@ function TimeGrid({
     })
     return map
   }, [events])
+  const gridTemplateColumns = `64px repeat(${days.length}, minmax(0, 1fr))`
 
   return (
     <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-auto">
       {!hideHeader ? (
-        <div ref={headerRef} className="sticky top-0 z-10 flex border-b border-[var(--color-border)] bg-white">
-          <div className="w-16 shrink-0 border-r border-[var(--color-border)]" />
+        <div
+          ref={headerRef}
+          className="sticky top-0 z-10 grid border-b border-[var(--color-border)] bg-white"
+          style={{ gridTemplateColumns }}
+        >
+          <div />
           {days.map((day) => (
             <div
               key={day.toISOString()}
-              className="flex flex-1 flex-col items-center border-r border-[var(--color-border)] py-2 last:border-r-0"
+              className={`flex flex-col items-center border-l ${COLUMN_DIVIDER_CLASS} py-2`}
             >
               <span className="text-[13px] font-medium text-[var(--color-text-muted)]">{DAY_NAMES[getDay(day)]}</span>
               <div
@@ -389,13 +397,19 @@ function TimeGrid({
         </div>
       ) : null}
 
-      <div className="relative flex" style={{ height: totalHeight }}>
+      <div
+        className="relative grid"
+        style={{ height: totalHeight, gridTemplateColumns, gridTemplateRows: `${totalHeight}px` }}
+      >
         <div
           ref={defaultAnchorRef}
           className="pointer-events-none absolute left-0 right-0"
           style={{ top: defaultScrollTop, height: 1 }}
         />
-        <div className="sticky left-0 z-10 w-16 shrink-0 border-r border-[var(--color-border)] bg-white">
+        <div
+          className={`sticky left-0 z-10 self-stretch border-r ${TIMELINE_DIVIDER_CLASS} bg-white`}
+          style={{ width: TIMELINE_LABEL_WIDTH }}
+        >
           {HOURS.map((hour) => (
             <div
               key={hour}
@@ -404,6 +418,15 @@ function TimeGrid({
             >
               {hour}:00
             </div>
+          ))}
+        </div>
+
+        <div
+          className="pointer-events-none absolute inset-y-0 right-0 z-0 grid"
+          style={{ left: TIMELINE_LABEL_WIDTH, gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}
+        >
+          {days.map((day) => (
+            <div key={`${day.toISOString()}_guide`} className={`h-full self-stretch border-l ${COLUMN_DIVIDER_CLASS}`} />
           ))}
         </div>
 
@@ -417,7 +440,7 @@ function TimeGrid({
           return (
             <div
               key={date}
-              className="relative flex-1 border-r border-[var(--color-border)] last:border-r-0"
+              className="relative z-10 h-full self-stretch"
               onClick={(eventObject) => {
                 const rect = eventObject.currentTarget.getBoundingClientRect()
                 const relativeY = eventObject.clientY - rect.top + (scrollRef.current?.scrollTop ?? 0)

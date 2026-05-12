@@ -77,7 +77,7 @@ export function ManageMembersModal() {
     <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={close}>
       <div className="absolute inset-0 bg-black/30" />
       <div
-        className="relative flex max-h-[500px] w-[360px] flex-col rounded-[var(--radius-card)] bg-white shadow-lg"
+        className="relative flex max-h-[72vh] w-[min(520px,94vw)] flex-col rounded-[var(--radius-card)] bg-white shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 border-b border-[var(--color-border)] px-4 py-3">

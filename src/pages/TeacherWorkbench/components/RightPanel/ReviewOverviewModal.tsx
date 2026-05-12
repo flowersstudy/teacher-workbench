@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   saveStudentReviewOverview,
+  type ReviewLossPointRate,
   type ReviewOverview,
   type ReviewPointRate,
   type ReviewPointStatus,
   type ReviewPointStatusValue,
 } from '../../api/reviewOverview'
+import { LOSS_POINT_DEFINITIONS } from './reviewLossPointDefinitions'
 
 const STATUS_OPTIONS: { value: ReviewPointStatusValue; label: string }[] = [
   { value: 'locked', label: '未开始' },
@@ -31,6 +33,7 @@ interface FormState {
   currentScore: string
   targetScore: string
   points: PointDraft[]
+  lossPoints: string[]
 }
 
 function parseNum(value: string): number | null {
@@ -75,12 +78,18 @@ function buildInitialForm(data: ReviewOverview | null, pointDefinitions: PointDe
     }
   })
 
+  const lossPoints = LOSS_POINT_DEFINITIONS.map((definition) => {
+    const rate = data?.lossPointRates?.find((item) => item.lossPointKey === definition.lossPointKey)
+    return rate?.currentRate != null ? String(rate.currentRate) : ''
+  })
+
   return {
     targetExam: data?.targetExam ?? '',
     entryScore: data?.progress?.entryScore != null ? String(data.progress.entryScore) : '',
     currentScore: data?.progress?.currentScore != null ? String(data.progress.currentScore) : '',
     targetScore: data?.progress?.targetScore != null ? String(data.progress.targetScore) : '',
     points,
+    lossPoints,
   }
 }
 
@@ -99,6 +108,17 @@ function buildPayload(form: FormState, pointDefinitions: PointDefinition[]): Rev
     status: form.points[index]?.status ?? 'locked',
   }))
 
+  const lossPointRates: ReviewLossPointRate[] = LOSS_POINT_DEFINITIONS.map((item, index) => ({
+    lossPointKey: item.lossPointKey,
+    reason: item.reason,
+    description: item.description,
+    checkpointName: item.checkpointName,
+    standard: item.standard,
+    currentRate: parseNum(form.lossPoints[index] ?? ''),
+    sourceType: 'monthly_review',
+    sortOrder: index + 1,
+  }))
+
   return {
     targetExam: form.targetExam.trim() || null,
     progress: {
@@ -108,6 +128,7 @@ function buildPayload(form: FormState, pointDefinitions: PointDefinition[]): Rev
     },
     pointRates,
     pointStatuses,
+    lossPointRates,
   }
 }
 
@@ -140,6 +161,13 @@ export function ReviewOverviewModal({
     })
   }
 
+  function setLossPoint(index: number, value: string) {
+    setForm((prev) => ({
+      ...prev,
+      lossPoints: prev.lossPoints.map((item, currentIndex) => (currentIndex === index ? value : item)),
+    }))
+  }
+
   async function handleSave() {
     setSaving(true)
     setError(null)
@@ -161,7 +189,7 @@ export function ReviewOverviewModal({
       onClick={onClose}
     >
       <div
-        className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+        className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
@@ -272,6 +300,44 @@ export function ReviewOverviewModal({
                 ))}
               </div>
             )}
+          </div>
+
+          <div>
+            <div className="mb-2 text-xs font-medium text-[var(--color-text-secondary)]">???????</div>
+            <div className="rounded-xl border border-[var(--color-border)]">
+              <div className="grid grid-cols-[56px_220px_minmax(0,1fr)_120px_92px] gap-px bg-[var(--color-border)] text-[10px] font-medium text-[var(--color-text-secondary)]">
+                <div className="bg-[var(--color-bg-left)] px-2 py-2">??</div>
+                <div className="bg-[var(--color-bg-left)] px-2 py-2">????</div>
+                <div className="bg-[var(--color-bg-left)] px-2 py-2">???</div>
+                <div className="bg-[var(--color-bg-left)] px-2 py-2">????</div>
+                <div className="bg-[var(--color-bg-left)] px-2 py-2">???</div>
+              </div>
+              <div className="max-h-[320px] overflow-y-auto">
+                {LOSS_POINT_DEFINITIONS.map((item, index) => (
+                  <div
+                    key={item.lossPointKey}
+                    className="grid grid-cols-[56px_220px_minmax(0,1fr)_120px_92px] items-start gap-px border-t border-[var(--color-border)] first:border-t-0"
+                  >
+                    <div className="px-2 py-2 text-[11px] text-[var(--color-text-muted)]">{item.lossPointKey}</div>
+                    <div className="px-2 py-2 text-[11px] leading-5 text-[var(--color-text-secondary)]">{item.reason}</div>
+                    <div className="px-2 py-2 text-xs text-[var(--color-text-primary)]">{item.description}</div>
+                    <div className="px-2 py-2 text-[11px] text-[var(--color-text-secondary)]">{item.checkpointName}</div>
+                    <div className="px-2 py-2">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={form.lossPoints[index] ?? ''}
+                        onChange={(event) => setLossPoint(index, event.target.value)}
+                        placeholder={String(item.standard)}
+                        className="w-full rounded-lg border border-[var(--color-border)] px-2 py-1.5 text-xs outline-none focus:border-[var(--color-primary)]"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="mt-2 text-[11px] text-[var(--color-text-muted)]">??????? 1 ???????????????????????</div>
           </div>
 
           {error ? (

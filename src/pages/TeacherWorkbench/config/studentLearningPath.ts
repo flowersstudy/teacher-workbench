@@ -10,6 +10,23 @@ export interface LearningPathResource {
   liveUrl?: string
   replayUrl?: string
   noteUrl?: string
+  videoLessons?: Array<{
+    id: string
+    title: string
+    sortOrder?: number
+    videoId: string
+  }>
+}
+
+export interface LearningPathTaskResult {
+  status?: string
+  submissionId?: string
+  fileName?: string
+  reviewType?: string
+  checkpoint?: string
+  gradedAt?: string
+  reviewedFileName?: string
+  hasReviewedFile?: boolean
 }
 
 export interface LearningPathItemDefinition {
@@ -45,6 +62,10 @@ export interface LearningPathStageDefinition {
 export interface LearningPathItem extends LearningPathItemDefinition {
   status: LearningPathItemStatus
   resource?: LearningPathResource | null
+  uploads?: Array<Record<string, unknown>>
+  appointment?: Record<string, unknown> | null
+  result?: LearningPathTaskResult | null
+  meta?: Record<string, unknown>
 }
 
 export interface LearningPathGroup {

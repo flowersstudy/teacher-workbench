@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   LEARNING_PATH_STAGE_ORDER,
@@ -9,11 +9,18 @@ import {
   type LearningPathTimeType,
 } from '../../config/studentLearningPath'
 import { fetchStudentLearningPath, updateStudentLearningPathTask, uploadPdf } from '../../api/learningPath'
+import {
+  fetchSubmissionFileUrl,
+  uploadReviewedSubmissionPdf,
+} from '../../api/submissions'
+import { api } from '../../../../lib/api'
+import { apiUrl } from '../../../../lib/apiBase'
+import { useWorkbenchStore } from '../../store/workbenchStore'
 
-const statusStyles: Record<LearningPathItemStatus, { dot: string; badge: string; label: string }> = {
-  done:    { dot: 'bg-green-500',                    badge: 'border-green-200 bg-green-50 text-green-600',                                                                    label: '已完成' },
-  current: { dot: 'bg-[var(--color-primary)]',       badge: 'border-[var(--color-primary)] bg-[var(--color-primary-light)] text-[var(--color-primary)]',                     label: '进行中' },
-  pending: { dot: 'bg-gray-300',                     badge: 'border-gray-200 bg-gray-50 text-gray-500',                                                                       label: '未开始' },
+const statusStyles: Record<LearningPathItemStatus, { dot: string }> = {
+  done:    { dot: 'bg-green-500' },
+  current: { dot: 'bg-[var(--color-primary)]' },
+  pending: { dot: 'bg-gray-300' },
 }
 
 type StageDisplayEntry =
@@ -28,7 +35,7 @@ const DIAGNOSE_GROUP_BLOCKS = [
   {
     key: 'paper',
     title: '试卷',
-    itemIds: ['diagnose_paper', 'diagnose_paper_upload', 'diagnose_analysis_video', 'diagnose_paper_feedback'],
+    itemIds: ['diagnose_paper', 'diagnose_paper_upload', 'diagnose_analysis_video', 'diagnose_reference_answer', 'diagnose_paper_feedback'],
   },
   {
     key: 'course',
@@ -43,6 +50,45 @@ const DIAGNOSE_GROUP_MAP = DIAGNOSE_GROUP_BLOCKS.reduce<Record<string, typeof DI
   })
   return result
 }, {})
+
+function looksLikeRemoteUrl(value: string): boolean {
+  return /^(https?:)?\/\//i.test(String(value || '').trim())
+}
+
+function resolveAssetUrl(url = ''): string {
+  if (!url) return ''
+  return looksLikeRemoteUrl(url) ? url : apiUrl(url)
+}
+
+function extractPolyvVideoId(value: string): string {
+  const rawValue = String(value || '').trim()
+  if (!rawValue) return ''
+
+  if (!looksLikeRemoteUrl(rawValue)) {
+    return rawValue
+  }
+
+  try {
+    const normalizedUrl = rawValue.startsWith('//') ? `https:${rawValue}` : rawValue
+    const parsedUrl = new URL(normalizedUrl)
+    const searchKeys = ['vid', 'videoId', 'video_id']
+
+    for (const key of searchKeys) {
+      const matchedValue = String(parsedUrl.searchParams.get(key) || '').trim()
+      if (matchedValue) {
+        return matchedValue
+      }
+    }
+
+    const pathMatch = parsedUrl.pathname.match(/\/([A-Za-z0-9_-]{6,})(?:\.html)?\/?$/)
+    if (pathMatch && pathMatch[1]) {
+      return pathMatch[1]
+    }
+  } catch (_error) {}
+
+  const queryMatch = rawValue.match(/[?&#](?:vid|videoId|video_id)=([^&#]+)/i)
+  return queryMatch && queryMatch[1] ? decodeURIComponent(queryMatch[1]).trim() : ''
+}
 
 function getItemsSummaryStatus(items: LearningPathItem[]): LearningPathItemStatus {
   if (items.length > 0 && items.every((item) => item.status === 'done')) return 'done'
@@ -73,7 +119,63 @@ function normalizeTheoryGroup(group: LearningPathStage['groups'][number]): Learn
   }
 }
 
+function ensureTheoryRoundReferenceAnswer(
+  group: LearningPathStage['groups'][number],
+): LearningPathStage['groups'][number] {
+  const items = Array.isArray(group.items) ? group.items : []
+  const nextItems: LearningPathItem[] = []
+  let changed = false
+
+  items.forEach((item) => {
+    nextItems.push(item)
+
+    const itemId = String(item.id || '').trim()
+    const match = itemId.match(/^theory_round_(\d+)_homework_pdf$/)
+    if (!match) {
+      return
+    }
+
+    const roundNumber = Number(match[1] || 0)
+    const referenceAnswerId = `theory_round_${roundNumber}_reference_answer`
+    const hasReferenceAnswer = items.some((candidate) => String(candidate.id || '').trim() === referenceAnswerId)
+
+    if (hasReferenceAnswer) {
+      return
+    }
+
+    changed = true
+    const baseResource = item.resource ?? null
+    const resourceTitle = String(baseResource?.title || '').trim()
+
+    nextItems.push({
+      ...item,
+      id: referenceAnswerId,
+      title: '参考答案',
+      desc: `第 ${roundNumber} 轮查看参考答案 PDF。`,
+      actionText: '查看答案',
+      resource: baseResource
+        ? {
+            ...baseResource,
+            title: resourceTitle
+              ? resourceTitle.replace(/课后作业/g, '参考答案')
+              : `第 ${roundNumber} 轮参考答案`,
+          }
+        : null,
+    })
+  })
+
+  if (!changed) {
+    return group
+  }
+
+  return {
+    ...group,
+    items: nextItems,
+  }
+}
+
 function buildDiagnoseDisplayEntries(items: LearningPathItem[]): StageDisplayEntry[] {
+  void ensureTheoryRoundReferenceAnswer
   const itemMap = new Map(items.map((item) => [item.id, item]))
   const addedGroups = new Set<string>()
 
@@ -104,6 +206,32 @@ function buildDiagnoseDisplayEntries(items: LearningPathItem[]): StageDisplayEnt
   }, [])
 }
 
+function buildIndexedRoundTitle(roundNumber: number, name = ''): string {
+  const safeName = String(name || '').trim()
+  return safeName ? `${roundNumber}. ${safeName}` : `第${roundNumber}轮`
+}
+
+function getTrainingRoundDisplayName(items: LearningPathItem[]): string {
+  const preferredIds = ['question', 'explain_video', 'analysis']
+
+  for (const suffix of preferredIds) {
+    const matchedItem = items.find((item) => String(item.id || '').endsWith(`_${suffix}`))
+    const resourceTitle = String(matchedItem?.resource?.title || '').trim()
+    if (resourceTitle) {
+      return resourceTitle
+    }
+  }
+
+  for (const item of items) {
+    const resourceTitle = String(item.resource?.title || '').trim()
+    if (resourceTitle) {
+      return resourceTitle
+    }
+  }
+
+  return ''
+}
+
 function buildTrainingDisplayEntries(items: LearningPathItem[]): StageDisplayEntry[] {
   const rounds = new Map<number, LearningPathItem[]>()
   const ungroupedItems: LearningPathItem[] = []
@@ -125,13 +253,13 @@ function buildTrainingDisplayEntries(items: LearningPathItem[]): StageDisplayEnt
   const orderedRounds = [...rounds.keys()].sort((left, right) => left - right)
 
   orderedRounds.forEach((roundNumber) => {
-    const roundItems = rounds.get(roundNumber) || []
+    const roundItems = sortTrainingRoundItems(rounds.get(roundNumber) || [])
     if (!roundItems.length) return
 
     entries.push({
       kind: 'group',
       id: `training_group_round_${roundNumber}`,
-      title: `第${roundNumber}轮`,
+      title: buildIndexedRoundTitle(roundNumber, getTrainingRoundDisplayName(roundItems)),
       status: getItemsSummaryStatus(roundItems),
       items: roundItems,
     })
@@ -140,6 +268,95 @@ function buildTrainingDisplayEntries(items: LearningPathItem[]): StageDisplayEnt
   return entries
 }
 
+function sortTrainingRoundItems(items: LearningPathItem[]): LearningPathItem[] {
+  const orderMap = new Map([
+    ['question', 0],
+    ['explain_video', 1],
+    ['analysis', 2],
+    ['homework_upload', 3],
+    ['homework_feedback', 4],
+    ['reflection_upload', 5],
+    ['reflection_feedback', 6],
+  ])
+
+  return [...items].sort((left, right) => {
+    const leftSuffix = String(left.id || '').replace(/^training_round_\d+_/, '')
+    const rightSuffix = String(right.id || '').replace(/^training_round_\d+_/, '')
+    const leftOrder = orderMap.get(leftSuffix) ?? Number.MAX_SAFE_INTEGER
+    const rightOrder = orderMap.get(rightSuffix) ?? Number.MAX_SAFE_INTEGER
+
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder
+    }
+
+    return String(left.id || '').localeCompare(String(right.id || ''))
+  })
+}
+
+function normalizeTrainingExplainVideoItem(item: LearningPathItem): LearningPathItem {
+  const itemId = String(item.id || '').trim()
+  if (!/^training_round_\d+_explain_video$/.test(itemId)) {
+    return item
+  }
+
+  return {
+    ...item,
+    title: '视频讲解',
+  }
+}
+
+function buildTheorySections(groups: LearningPathStage['groups'] = []) {
+  const normalizedGroups = groups.map((group) => normalizeTheoryGroup(group))
+  const consensusGroups: LearningPathStage['groups'] = []
+  const lessonGroups: LearningPathStage['groups'] = []
+  const correctionGroups: LearningPathStage['groups'] = []
+
+  normalizedGroups.forEach((group) => {
+    const items = group.items || []
+    if (items.some((item) => String(item.id || '').trim().startsWith('theory_consensus_'))) {
+      consensusGroups.push(group)
+      return
+    }
+
+    if (items.some((item) => String(item.id || '').trim().startsWith('theory_correction_'))) {
+      correctionGroups.push(group)
+      return
+    }
+
+    lessonGroups.push(group)
+  })
+
+  return [
+    {
+      id: 'theory_section_consensus',
+      title: '1v1共识',
+      groups: consensusGroups,
+      timeTarget: null,
+    },
+    {
+      id: 'theory_section_lessons',
+      title: '多轮理论课',
+      groups: lessonGroups,
+      timeTarget: lessonGroups.length
+        ? pickAnchorItem(
+            lessonGroups.flatMap((group) => group.items || []),
+            ['theory_round_1_recorded', 'theory_mindmap_upload'],
+          )
+        : null,
+    },
+    {
+      id: 'theory_section_correction',
+      title: '1v1纠偏',
+      groups: correctionGroups,
+      timeTarget: correctionGroups.length
+        ? pickAnchorItem(
+            correctionGroups.flatMap((group) => group.items || []),
+            ['theory_correction_live', 'theory_correction_upload'],
+          )
+        : null,
+    },
+  ].filter((section) => section.groups.length > 0)
+}
 function buildStageCardEntries(entries: StageDisplayEntry[]): StageCardEntry[] {
   const cards: StageCardEntry[] = []
   let pendingItems: LearningPathItem[] = []
@@ -169,6 +386,77 @@ function buildStageCardEntries(entries: StageDisplayEntry[]): StageCardEntry[] {
   return cards
 }
 
+function pickAnchorItem(items: LearningPathItem[], preferredIds: string[] = []): LearningPathItem | null {
+  for (const preferredId of preferredIds) {
+    const matched = items.find((item) => String(item.id || '').trim() === preferredId)
+    if (matched) {
+      return matched
+    }
+  }
+
+  const firstNonTimer = items.find((item) => String(item.actionType || '').trim() !== 'timer')
+  return firstNonTimer || items[0] || null
+}
+
+function shouldShowItemTime(stageKey: LearningPathStageKey, item: LearningPathItem): boolean {
+  const itemId = String(item.id || '').trim()
+
+  if (stageKey === 'diagnose') {
+    return ['diagnose_paper_upload', 'diagnose_analysis_video'].includes(itemId)
+  }
+
+  return false
+}
+
+function shouldShowItemTimeEditor(stageKey: LearningPathStageKey, item: LearningPathItem): boolean {
+  return shouldShowItemTime(stageKey, item)
+}
+
+function getGroupedEntryTimeTarget(
+  stageKey: LearningPathStageKey,
+  entry: Extract<StageDisplayEntry, { kind: 'group' }>,
+): { label: string; item: LearningPathItem } | null {
+  if (stageKey === 'theory') {
+    if (entry.id === 'theory_group_lessons') {
+      const item = pickAnchorItem(entry.items, ['theory_round_1_recorded', 'theory_consensus_live'])
+      return item ? { label: '理论课时间', item } : null
+    }
+
+    if (entry.id === 'theory_group_mindmap') {
+      const item = pickAnchorItem(entry.items, ['theory_mindmap_upload'])
+      return item ? { label: '思维导图时间', item } : null
+    }
+
+    if (entry.id === 'theory_group_correction') {
+      const item = pickAnchorItem(entry.items, ['theory_correction_live', 'theory_correction_upload'])
+      return item ? { label: '1v1纠偏时间', item } : null
+    }
+  }
+
+  if (stageKey === 'training' && entry.id.startsWith('training_group_round_')) {
+    const matched = entry.id.match(/training_group_round_(\d+)/)
+    const roundNumber = Number(matched?.[1] || 0)
+    const item = pickAnchorItem(entry.items, [
+      `training_round_${roundNumber}_homework_upload`,
+      `training_round_${roundNumber}_question`,
+    ])
+    return item ? { label: `${entry.title}时间`, item } : null
+  }
+
+  return null
+}
+
+function getStageGroupTimeTarget(
+  stageKey: LearningPathStageKey,
+  items: LearningPathItem[],
+): { label: string; item: LearningPathItem } | null {
+  if (stageKey === 'exam') {
+    const item = pickAnchorItem(items, ['exam_homework_upload', 'exam_question'])
+    return item ? { label: '考试时间', item } : null
+  }
+
+  return null
+}
 function getDefaultTimeType(item: LearningPathItem): LearningPathTimeType {
   return ['live', 'replay', 'schedule'].includes(String(item.actionType || '').trim())
     ? 'fixed'
@@ -186,7 +474,76 @@ function buildTimeDisplayLabel(timeType: LearningPathTimeType, timeLabel: string
   if (!safeTimeLabel) return ''
   return `${timeType === 'deadline' ? '截止时间' : '固定时间'}：${safeTimeLabel}`
 }
-// ── ResourceEditor ────────────────────────────────────────────────────────────
+
+function getFeedbackTaskIdForUploadTask(taskId = ''): string {
+  if (!taskId) return ''
+
+  const fixedMap: Record<string, string> = {
+    diagnose_paper_upload: 'diagnose_paper_feedback',
+    theory_mindmap_upload: 'theory_mindmap_feedback',
+    theory_correction_upload: 'theory_correction_review',
+    exam_homework_upload: 'exam_feedback',
+    drill_upload: 'drill_ai_review',
+  }
+
+  if (fixedMap[taskId]) return fixedMap[taskId]
+
+  const trainingMatch = taskId.match(/^training_round_(\d+)_(homework|reflection)_upload$/)
+  if (trainingMatch) {
+    return `training_round_${trainingMatch[1]}_${trainingMatch[2]}_feedback`
+  }
+
+  const examMatch = taskId.match(/^(exam(?:_round|_remedial)_\d+)_homework_upload$/)
+  if (examMatch) {
+    return `${examMatch[1]}_feedback`
+  }
+
+  return ''
+}
+
+function getUploadTaskIdForFeedbackTask(taskId = ''): string {
+  if (!taskId) return ''
+
+  const fixedMap: Record<string, string> = {
+    diagnose_paper_feedback: 'diagnose_paper_upload',
+    theory_mindmap_feedback: 'theory_mindmap_upload',
+    theory_correction_review: 'theory_correction_upload',
+    exam_feedback: 'exam_homework_upload',
+    drill_ai_review: 'drill_upload',
+  }
+
+  if (fixedMap[taskId]) return fixedMap[taskId]
+
+  const trainingMatch = taskId.match(/^training_round_(\d+)_(homework|reflection)_feedback$/)
+  if (trainingMatch) {
+    return `training_round_${trainingMatch[1]}_${trainingMatch[2]}_upload`
+  }
+
+  const examMatch = taskId.match(/^(exam(?:_round|_remedial)_\d+)_feedback$/)
+  if (examMatch) {
+    return `${examMatch[1]}_homework_upload`
+  }
+
+  return ''
+}
+
+function asPlainRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function readStringField(record: Record<string, unknown> | null, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = record?.[key]
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+  }
+
+  return ''
+}
+// 闂傚倸鍊搁崐椋庣矆娓氣偓瀹曨垶宕稿Δ鈧崒銊︾節婵犲倻澧曠痪鎯ь煼閺岀喖宕滆鐢盯鏌ｉ幘鍐叉殻闁哄本绋栫粻娑㈠箼閸愨敩锔界箾?ResourceEditor 闂傚倸鍊搁崐椋庣矆娓氣偓瀹曨垶宕稿Δ鈧崒銊︾節婵犲倻澧曠痪鎯ь煼閺岀喖宕滆鐢盯鏌ｉ幘鍐叉殻闁哄本绋栫粻娑㈠箼閸愨敩锔界箾鐎涙鐭掔紒鐘崇墪椤繐煤椤忓嫮顦ㄩ梺鍦帛鐢帗娼忛崨瀛樷拺缂佸顑欓崕鎰版煙閻熺増鍠樼€殿喛顕ч鍏煎緞婵犲嫷妲┑鐘灱濞夋盯鏁冮敐鍡欑彾闁哄洢鍨洪埛鎺懨归敐鍥剁劸闁哄棝浜堕弻娑樜熼懡銈囩厜閻庤娲橀崹鍧楃嵁濡偐纾兼俊顖滃帶鐢姊绘担渚劸缂佺粯鍔欒棟妞ゆ牗绋撻々鎻捨旈敐鍛殲闁抽攱鍨块弻娑㈠箛椤撶偟绁烽柣銏╁灛閸旀垿寮诲☉姘ｅ亾閿濆骸浜濈€规洖鐭傞弻锛勪沪閻ｅ睗褏鈧娲橀〃鍡楊嚗閸曨剛绡€濞达絽澹婂Λ婊堟⒒閸屾艾鈧绮堟笟鈧畷顖炲锤濡も偓閸屻劍绻濇繝鍌滃缁炬儳顭烽弻鐔煎礈瑜忕敮娑㈡煟閹惧啿鏆ｉ柡灞剧缁犳盯骞欓崘鈹附绻涚€涙鐭掔紒鐘崇墪椤繐煤椤忓嫮顦ㄩ梺鍦帛鐢帗娼忛崨瀛樷拺缂佸顑欓崕鎰版煙閻熺増鍠樼€殿喛顕ч鍏煎緞婵犲嫷妲┑鐘灱濞夋盯鏁冮敐鍡欑彾闁哄洢鍨洪埛鎺懨归敐鍥剁劸闁哄棝浜堕弻娑樜熼懡銈囩厜閻庤娲橀崹鍧楃嵁濡偐纾兼俊顖滃帶鐢姊绘担渚劸缂佺粯鍔欒棟妞ゆ牗绋撻々鎻捨旈敐鍛殲闁抽攱鍨块弻娑㈠箛椤撶偟绁烽柣銏╁灛閸旀垿寮诲☉姘ｅ亾閿濆骸浜濈€规洖鐭傞弻锛勪沪閻ｅ睗褏鈧娲橀〃鍡楊嚗閸曨剛绡€濞达絽澹婂Λ婊堟⒒閸屾艾鈧绮堟笟鈧畷顖炲锤濡も偓閸屻劍绻濇繝鍌滃缁炬儳顭烽弻鐔煎礈瑜忕敮娑㈡煟閹惧啿鏆ｉ柡灞剧缁犳盯骞欓崘鈹附绻涚€涙鐭掔紒鐘崇墪椤繐煤椤忓嫮顦ㄩ梺鍦帛鐢帗娼忛崨瀛樷拺缂佸顑欓崕鎰版煙閻熺増鍠樼€殿喛顕ч鍏煎緞婵犲嫷妲┑鐘灱濞夋盯鏁冮敐鍡欑彾闁哄洢鍨洪埛鎺懨归敐鍥剁劸闁哄棝浜堕弻娑樜熼懡銈囩厜閻庤娲橀崹鍧楃嵁濡偐纾兼俊顖滃帶鐢姊绘担渚劸缂佺粯鍔欒棟妞ゆ牗绋撻々鎻捨旈敐鍛殲闁抽攱鍨块弻娑㈠箛椤撶偟绁烽柣銏╁灛閸旀垿寮诲☉姘ｅ亾閿濆骸浜濈€规洖鐭傞弻锛勪沪閻ｅ睗褏鈧娲橀〃鍡楊嚗閸曨剛绡€濞达絽澹婂Λ婊堟⒒閸屾艾鈧绮堟笟鈧畷顖炲锤濡も偓閸屻劍绻濇繝鍌滃缁炬儳顭烽弻鐔煎礈瑜忕敮娑㈡煟閹惧啿鏆ｉ柡灞剧缁犳盯骞欓崘鈹附绻涚€涙鐭掔紒鐘崇墪椤繐煤椤忓嫮顦ㄩ梺鍦帛鐢帗娼忛崨瀛樷拺缂佸顑欓崕鎰版煙閻熺増鍠樼€殿喛顕ч鍏煎緞婵犲嫷妲┑鐘灱濞夋盯鏁冮敐鍡欑彾闁哄洢鍨洪埛鎺懨归敐鍥剁劸闁哄棝浜堕弻娑樜熼懡銈囩厜閻庤娲橀崹鍧楃嵁濡偐纾兼俊顖滃帶鐢姊绘担渚劸缂佺粯鍔欒棟妞ゆ牗绋撻々鎻捨旈敐鍛殲闁抽攱鍨块弻娑㈠箛椤撶偟绁烽柣銏╁灛閸旀垿寮诲☉姘ｅ亾閿濆骸浜濈€规洖鐭傞弻锛勪沪閻ｅ睗褏鈧娲橀〃鍡楊嚗閸曨剛绡€濞达絽澹婂Λ婊堟⒒閸屾艾鈧绮堟笟鈧畷顖炲锤濡も偓閸屻劍绻濇繝鍌滃缁炬儳顭烽弻鐔煎礈瑜忕敮娑㈡煟閹惧啿鏆ｉ柡灞剧缁犳盯骞欓崘鈹附绻涚€涙鐭掔紒鐘崇墪椤繐煤椤忓嫮顦ㄩ梺鍦帛鐢帗娼忛崨瀛樷拺缂佸顑欓崕鎰版煙閻熺増鍠樼€殿喛顕ч鍏煎緞婵犲嫷妲┑鐘灱濞夋盯鏁冮敐鍡欑彾闁哄洢鍨洪埛鎺懨归敐鍥剁劸闁哄棝浜堕弻娑樜熼懡銈囩厜閻庤娲橀崹鍧楃嵁濡偐纾兼俊顖滃帶鐢姊绘担渚劸缂佺粯鍔欒棟妞ゆ牗绋撻々鎻捨旈敐鍛殲闁抽攱鍨块弻娑㈠箛椤撶偟绁烽柣銏╁灛閸旀垿寮诲☉姘ｅ亾閿濆骸浜濈€规洖鐭傞弻锛勪沪閻ｅ睗褏鈧娲橀〃鍡楊嚗閸曨剛绡€濞达絽澹婂Λ婊堟⒒閸屾艾鈧绮堟笟鈧畷顖炲锤濡も偓閸屻劍绻濇繝鍌滃缁炬儳顭烽弻鐔煎礈瑜忕敮娑㈡煟閹惧啿鏆ｉ柡灞剧缁犳盯骞欓崘鈹附绻涚€涙鐭掔紒鐘崇墪椤繐煤椤忓嫮顦ㄩ梺鍦帛鐢帗娼忛崨瀛樷拺缂佸顑欓崕鎰版煙閻熺増鍠樼€殿喛顕ч鍏煎緞婵犲嫷妲┑鐘灱濞夋盯鏁冮敐鍡欑彾闁哄洢鍨洪埛鎺懨归敐鍥剁劸闁哄棝浜堕弻娑樜熼懡銈囩厜閻庤娲橀崹鍧楃嵁濡偐纾兼俊顖滃帶鐢姊绘担渚劸缂佺粯鍔欒棟妞ゆ牗绋撻々鎻捨旈敐鍛殲闁抽攱鍨块弻娑㈠箛椤撶偟绁烽柣銏╁灛閸旀垿寮诲☉姘ｅ亾閿濆骸浜濈€规洖鐭傞弻锛勪沪閻ｅ睗褏鈧娲橀〃鍡楊嚗閸曨剛绡€濞达絽澹婂Λ婊堟⒒閸屾艾鈧绮堟笟鈧畷顖炲锤濡も偓閸屻劍绻濇繝鍌滃缁炬儳顭烽弻鐔煎礈瑜忕敮娑㈡煟閹惧啿鏆ｉ柡灞剧缁犳盯骞欓崘鈹附绻涚€涙鐭掔紒鐘崇墪椤繐煤椤忓嫮顦ㄩ梺鍦帛鐢帗娼忛崨瀛樷拺缂佸顑欓崕鎰版煙閻熺増鍠樼€殿喛顕ч鍏煎緞婵犲嫷妲┑鐘灱濞夋盯鏁冮敐鍡欑彾闁哄洢鍨洪埛鎺懨归敐鍥剁劸闁哄棝浜堕弻娑樜熼懡銈囩厜閻庤娲橀崹鍧楃嵁濡偐纾兼俊顖滃帶鐢姊绘担渚劸缂佺粯鍔欒棟妞ゆ牗绋撻々鎻捨旈敐鍛殲闁抽攱鍨块弻娑㈠箛椤撶偟绁烽柣銏╁灛閸旀垿寮诲☉姘ｅ亾閿濆骸浜濈€规洖鐭傞弻锛勪沪閻ｅ睗褏鈧娲橀〃鍡楊嚗閸曨剛绡€濞达絽澹婂Λ婊堟⒒閸屾艾鈧绮堟笟鈧畷顖炲锤濡も偓閸屻劍绻濇繝鍌滃缁炬儳顭烽弻鐔煎礈瑜忕敮娑㈡煟閹惧啿鏆ｉ柡灞剧缁犳盯骞欓崘鈹附绻涚€涙鐭掔紒鐘崇墪椤繐煤椤忓嫮顦ㄩ梺鍦帛鐢帗娼忛崨瀛樷拺缂佸顑欓崕鎰版煙閻熺増鍠樼€殿喛顕ч鍏煎緞婵犲嫷妲┑鐘灱濞夋盯鏁冮敐鍡欑彾?
 function ResourceEditor({
   item,
   studentId,
@@ -198,34 +555,33 @@ function ResourceEditor({
   studentId: string
   pointName: string
   stageKey: LearningPathStageKey
-  onSaved: (taskId: string, url: string, videoId: string) => void
+  onSaved: (item: LearningPathItem, url: string, videoId: string) => Promise<void>
 }) {
-  const isPdf    = item.actionType === 'document' || item.actionType === 'report'
+  const isDocument = item.actionType === 'document'
   const isReport = item.actionType === 'report'
-  const isVideo  = item.actionType === 'video'
-  const isLive   = item.actionType === 'live'
+  const isPdf = isDocument || isReport
+  const isVideo = item.actionType === 'video'
+  const isLive = item.actionType === 'live'
   const isReplay = item.actionType === 'replay'
-  const isPdfLike = isPdf || isReport
-  if (!isPdfLike && !isVideo && !isLive && !isReplay) return null
+  if (!isPdf && !isVideo && !isLive && !isReplay) return null
 
-  const currentUrl     = isLive ? (item.resource?.liveUrl ?? item.resource?.url ?? '')
-                       : isReplay ? (item.resource?.replayUrl ?? item.resource?.url ?? '')
-                       : (item.resource?.url ?? '')
+  const currentUrl = isLive ? (item.resource?.liveUrl ?? item.resource?.url ?? '')
+    : isReplay ? (item.resource?.replayUrl ?? item.resource?.url ?? '')
+    : (item.resource?.url ?? '')
   const currentVideoId = item.resource?.videoId ?? ''
 
-  const [open, setOpen]         = useState(false)
-  const [url, setUrl]           = useState(currentUrl)
-  const [videoId, setVideoId]   = useState(currentVideoId)
-  const [saving, setSaving]     = useState(false)
-  const [saved, setSaved]       = useState(false)
-  const [error, setError]       = useState('')
+  const [open, setOpen] = useState(false)
+  const [url, setUrl] = useState(currentUrl)
+  const [videoId, setVideoId] = useState(currentVideoId)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [popupStyle, setPopupStyle] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
   const fileInputRef = useRef<HTMLInputElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
 
-  // 点外部关闭
   useEffect(() => {
     if (!open) return
     const fn = (e: MouseEvent) => {
@@ -238,7 +594,6 @@ function ResourceEditor({
     return () => document.removeEventListener('mousedown', fn)
   }, [open])
 
-  // 打开时重置为当前值，并计算弹出位置
   function handleOpen() {
     const initUrl = isLive
       ? (item.resource?.liveUrl ?? item.resource?.url ?? '')
@@ -260,13 +615,19 @@ function ResourceEditor({
     setSaving(true)
     setError('')
     try {
+      const trimmedUrl = url.trim()
+      const trimmedVideoId = videoId.trim()
+      const resolvedVideoId = isVideo ? (trimmedVideoId || extractPolyvVideoId(trimmedUrl)) : trimmedVideoId
+      if (isPdf && !trimmedUrl) {
+        throw new Error(isReport ? '请先上传报告 PDF' : '请先上传 PDF 或填写文件链接')
+      }
       const resource = {
-        resourceType: isPdfLike ? 'pdf' : isVideo ? 'video' : isLive ? 'live' : 'replay',
+        resourceType: isPdf ? 'pdf' : isVideo ? 'video' : isLive ? 'live' : 'replay',
         title: item.title,
-        url: url.trim(),
-        videoId: videoId.trim(),
-        ...(isLive   ? { liveUrl:   url.trim() } : {}),
-        ...(isReplay ? { replayUrl: url.trim() } : {}),
+        url: trimmedUrl,
+        videoId: resolvedVideoId,
+        ...(isLive ? { liveUrl: trimmedUrl } : {}),
+        ...(isReplay ? { replayUrl: trimmedUrl } : {}),
       }
       await updateStudentLearningPathTask(studentId, item.id, {
         pointName,
@@ -274,9 +635,12 @@ function ResourceEditor({
         status: item.status,
         resource,
       })
-      onSaved(item.id, url.trim(), videoId.trim())
+      await onSaved(item, trimmedUrl, resolvedVideoId)
       setSaved(true)
-      setTimeout(() => { setSaved(false); setOpen(false) }, 900)
+      setTimeout(() => {
+        setSaved(false)
+        setOpen(false)
+      }, 900)
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败')
     } finally {
@@ -284,11 +648,14 @@ function ResourceEditor({
     }
   }
 
-  const hasValue = (isLive || isReplay) ? !!currentUrl : isPdfLike ? !!currentUrl : !!currentVideoId
-
+  const hasValue = isLive || isReplay
+    ? !!currentUrl
+    : isPdf
+      ? !!currentUrl
+      : !!(currentVideoId || currentUrl)
   const buttonLabel = hasValue
-    ? (isPdf ? '已设置链接' : isVideo ? '已设置视频' : isLive ? '已设置上课链接' : '已设置回放链接')
-    : (isPdf ? '设置链接'   : isVideo ? '设置视频'   : isLive ? '设置上课链接'   : '设置回放链接')
+    ? (isReport ? '已上传报告' : isPdf ? '已设文件' : isVideo ? '已设视频' : isLive ? '已设上课链接' : '已设回放链接')
+    : (isReport ? '上传报告' : isPdf ? '设置文件' : isVideo ? '设置视频' : isLive ? '设置上课链接' : '设置回放链接')
 
   return (
     <div className="min-w-0">
@@ -305,29 +672,33 @@ function ResourceEditor({
       >
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           {hasValue
-            ? <><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></>
-            : <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>
+            ? <><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></>
+            : <><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></>
           }
         </svg>
         {buttonLabel}
       </button>
 
       {open && createPortal(
-        <div ref={wrapRef} style={{ position: 'fixed', top: popupStyle.top, left: popupStyle.left, zIndex: 9999 }} className="w-72 rounded-xl border border-[var(--color-border)] bg-white p-3 shadow-lg">
+        <div ref={wrapRef} style={{ position: 'fixed', top: popupStyle.top, left: popupStyle.left, zIndex: 9999 }} className="w-[360px] rounded-xl border border-[var(--color-border)] bg-white p-3 shadow-lg">
           <div className="mb-2 text-[11px] font-semibold text-[var(--color-text-secondary)]">
-            {isPdf ? '设置文件链接' : isVideo ? '设置视频资源' : isLive ? '设置腾讯会议上课链接' : '设置腾讯会议回放链接'}
+            {isReport ? '上传报告 PDF' : isPdf ? '设置文件资源' : isVideo ? '设置视频资源' : isLive ? '设置上课链接' : '设置回放链接'}
           </div>
 
           {isPdf && (
             <div className="mb-2">
-              <div className="mb-1 text-[10px] text-[var(--color-text-muted)]">文件 URL（PDF 直链）</div>
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://..."
-                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-left)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--color-primary)]"
-              />
+              {!isReport && (
+                <>
+                  <div className="mb-1 text-[10px] text-[var(--color-text-muted)]">文件 URL（PDF 直链）</div>
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-left)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--color-primary)]"
+                  />
+                </>
+              )}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -341,6 +712,7 @@ function ResourceEditor({
                   try {
                     const uploadedUrl = await uploadPdf(file)
                     setUrl(uploadedUrl)
+                    setSaved(false)
                   } catch (err) {
                     setError(err instanceof Error ? err.message : '上传失败')
                   } finally {
@@ -349,14 +721,29 @@ function ResourceEditor({
                   }
                 }}
               />
+              {isReport && (
+                <div className="mb-1.5 rounded-lg bg-[var(--color-bg-left)] px-2.5 py-2 text-[10px] leading-4 text-[var(--color-text-muted)]">
+                  诊断报告和卡点报告仅支持 PDF。上传后点击保存，后端学习路径和学生端会同步读取同一份文件。
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
                 className="mt-1.5 flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-[var(--color-border)] py-1.5 text-[10px] text-[var(--color-text-muted)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] disabled:opacity-50"
               >
-                {uploading ? '上传中…' : '或点击上传 PDF 文件'}
+                {uploading ? '上传中...' : isReport ? '上传报告 PDF' : '上传 PDF'}
               </button>
+              {!!url && (
+                <a
+                  href={resolveAssetUrl(url)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1.5 flex w-full items-center justify-center rounded-lg border border-[var(--color-border)] py-1.5 text-[10px] text-[var(--color-primary)] hover:border-[var(--color-primary)]"
+                >
+                  {isReport ? '预览当前报告 PDF' : '预览当前 PDF'}
+                </a>
+              )}
             </div>
           )}
 
@@ -373,7 +760,7 @@ function ResourceEditor({
                 />
               </div>
               <div className="mb-2">
-                <div className="mb-1 text-[10px] text-[var(--color-text-muted)]">或直接填视频链接</div>
+                <div className="mb-1 text-[10px] text-[var(--color-text-muted)]">或直接填写视频链接</div>
                 <input
                   type="url"
                   value={url}
@@ -388,13 +775,13 @@ function ResourceEditor({
           {(isLive || isReplay) && (
             <div className="mb-2">
               <div className="mb-1 text-[10px] text-[var(--color-text-muted)]">
-                {isLive ? '腾讯会议入会链接' : '腾讯会议回放链接'}
+                {isLive ? '上课链接' : '回放链接'}
               </div>
               <input
                 type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="可填写腾讯会议链接、整段邀请文案或会议号"
+                placeholder="可粘贴会议链接、邀请文案或会议号"
                 className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-left)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--color-primary)]"
               />
             </div>
@@ -403,20 +790,193 @@ function ResourceEditor({
           {!!error && <div className="mb-1.5 text-[10px] text-red-500">{error}</div>}
 
           <div className="flex gap-2">
-            <button type="button" onClick={() => setOpen(false)}
-              className="flex-1 rounded-lg border border-[var(--color-border)] py-1 text-xs text-[var(--color-text-muted)] hover:bg-[var(--color-bg-left)]">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="flex-1 rounded-lg border border-[var(--color-border)] py-1 text-xs text-[var(--color-text-muted)] hover:bg-[var(--color-bg-left)]"
+            >
               取消
             </button>
-            <button type="button" onClick={handleSave} disabled={saving || saved}
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || saved}
               className={[
                 'flex-1 rounded-lg py-1 text-xs font-semibold transition-colors',
                 saved ? 'bg-green-500 text-white' : 'bg-[var(--color-primary)] text-white hover:opacity-80 disabled:opacity-50',
-              ].join(' ')}>
-              {saved ? '已保存 ✓' : saving ? '保存中…' : '保存'}
+              ].join(' ')}
+            >
+              {saved ? '已保存' : saving ? '保存中...' : '保存'}
             </button>
           </div>
         </div>
       , document.body)}
+    </div>
+  )
+}
+
+function SubmissionViewer({
+  submissionId,
+  fileName,
+}: {
+  submissionId: string
+  fileName?: string
+}) {
+  const [previewing, setPreviewing] = useState(false)
+  const [error, setError] = useState('')
+
+  if (!submissionId) return null
+
+  async function handlePreviewSubmission() {
+    setPreviewing(true)
+    setError('')
+    try {
+      const url = await fetchSubmissionFileUrl(submissionId)
+      window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '打开学生提交失败')
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
+  return (
+    <div className="w-full rounded-xl border border-dashed border-[var(--color-border)] px-3 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={previewing}
+          onClick={() => void handlePreviewSubmission()}
+          className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] disabled:opacity-50"
+        >
+          {previewing ? '打开中...' : '查看学生提交'}
+        </button>
+      </div>
+      {!!fileName && (
+        <div className="mt-2 text-[11px] text-[var(--color-text-muted)]">
+          学生文件：{fileName}
+        </div>
+      )}
+      {error ? (
+        <div className="mt-2 text-[11px] text-red-500">{error}</div>
+      ) : null}
+    </div>
+  )
+}
+
+function FeedbackEditor({
+  submissionId,
+  sourceFileName,
+  initialReviewedFileName,
+  initialReviewed,
+  onSubmitted,
+}: {
+  submissionId: string
+  sourceFileName?: string
+  initialReviewedFileName?: string
+  initialReviewed?: boolean
+  onSubmitted: () => Promise<void>
+}) {
+  const reviewedFileName = String(initialReviewedFileName || '').trim()
+  const [reviewFile, setReviewFile] = useState<File | null>(null)
+  const [reviewFileName, setReviewFileName] = useState(reviewedFileName)
+  const [reviewed, setReviewed] = useState(!!initialReviewed)
+  const [previewing, setPreviewing] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setReviewFileName(reviewedFileName)
+  }, [reviewedFileName])
+
+  useEffect(() => {
+    setReviewed(!!initialReviewed)
+  }, [initialReviewed])
+
+  if (!submissionId) return null
+
+  async function handlePreviewSubmission() {
+    setPreviewing(true)
+    setError('')
+    try {
+      const url = await fetchSubmissionFileUrl(submissionId)
+      window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '打开学生提交失败')
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
+  async function handleSubmitReview() {
+    setSubmitting(true)
+    setError('')
+    try {
+      if (reviewFile) {
+        const result = await uploadReviewedSubmissionPdf(submissionId, reviewFile)
+        setReviewFileName(result.reviewedFileName || reviewFile.name)
+      } else if (!reviewFileName) {
+        throw new Error('请先上传批改 PDF')
+      }
+
+      await api.put(`/api/submissions/${submissionId}/grade`, {})
+      setReviewFile(null)
+      setReviewed(true)
+      await onSubmitted()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '提交批改失败')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="w-full rounded-xl border border-dashed border-[var(--color-border)] px-3 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={previewing}
+          onClick={() => void handlePreviewSubmission()}
+          className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] disabled:opacity-50"
+        >
+          {previewing ? '打开中...' : '查看学生提交'}
+        </button>
+        <label className="cursor-pointer rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]">
+          上传批改 PDF
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0] || null
+              setReviewFile(file)
+              setReviewFileName(file?.name || reviewedFileName)
+              setError('')
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          disabled={submitting || (!reviewFile && !reviewFileName)}
+          onClick={() => void handleSubmitReview()}
+          className="rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+        >
+          {submitting ? '提交中...' : (reviewed ? '重新提交批改' : '提交批改')}
+        </button>
+      </div>
+      {!!sourceFileName && (
+        <div className="mt-2 text-[11px] text-[var(--color-text-muted)]">
+          学生文件：{sourceFileName}
+        </div>
+      )}
+      <div className="mt-2 text-[11px] text-[var(--color-text-muted)]">
+        批改文件：{reviewFileName || '未上传'}
+      </div>
+      {error ? (
+        <div className="mt-2 text-[11px] text-red-500">{error}</div>
+      ) : null}
     </div>
   )
 }
@@ -426,12 +986,14 @@ function TaskTimeEditor({
   studentId,
   pointName,
   stageKey,
+  label,
   onSaved,
 }: {
   item: LearningPathItem
   studentId: string
   pointName: string
   stageKey: LearningPathStageKey
+  label?: string
   onSaved: (taskId: string, timeLabel: string, timeType: LearningPathTimeType) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -474,8 +1036,9 @@ function TaskTimeEditor({
   }
 
   const hasValue = !!String(item.timeLabel || '').trim()
+  const editorTitle = label || '时间设置'
   const buttonLabel = hasValue
-    ? (getResolvedTimeType(item) === 'deadline' ? '已设置截止时间' : '已设置固定时间')
+    ? (getResolvedTimeType(item) === 'deadline' ? '已设截止时间' : '已设固定时间')
     : '设置时间'
 
   return (
@@ -505,7 +1068,7 @@ function TaskTimeEditor({
 
       {open && (
         <div className="mt-2 w-64 rounded-xl border border-[var(--color-border)] bg-white p-3 shadow-sm">
-          <div className="mb-1 text-[11px] font-semibold text-[var(--color-text-secondary)]">阶段时间</div>
+          <div className="mb-1 text-[11px] font-semibold text-[var(--color-text-secondary)]">{editorTitle}</div>
           <div className="mb-1 text-[11px] font-semibold text-[var(--color-text-secondary)]">时间类型</div>
           <select
             value={timeType}
@@ -522,7 +1085,7 @@ function TaskTimeEditor({
             placeholder="例如：周三 19:00-20:30"
             className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-left)] px-2.5 py-1.5 text-xs outline-none focus:border-amber-300"
           />
-          <div className="mt-1 text-[10px] text-[var(--color-text-muted)]">支持日期、时间段或任意简短说明。</div>
+          <div className="mt-1 text-[10px] text-[var(--color-text-muted)]">支持日期、时间段或简短说明。</div>
           {!!error && <div className="mt-1.5 text-[10px] text-red-500">{error}</div>}
           <div className="mt-2 flex gap-2">
             <button
@@ -545,7 +1108,7 @@ function TaskTimeEditor({
                 saved ? 'bg-green-500 text-white' : 'bg-amber-500 text-white hover:opacity-80 disabled:opacity-50',
               ].join(' ')}
             >
-              {saved ? '已保存' : saving ? '保存中' : '保存'}
+              {saved ? '已保存' : saving ? '保存中...' : '保存'}
             </button>
           </div>
         </div>
@@ -554,8 +1117,18 @@ function TaskTimeEditor({
   )
 }
 
-// ── LearningPathPanel ─────────────────────────────────────────────────────────
-export function LearningPathPanel({ studentId, pointName }: { studentId: string; pointName: string }) {
+// 闂傚倸鍊搁崐椋庣矆娓氣偓瀹曨垶宕稿Δ鈧崒銊︾節婵犲倻澧曠痪鎯ь煼閺岀喖宕滆鐢盯鏌ｉ幘鍐叉殻闁哄本绋栫粻娑㈠箼閸愨敩锔界箾?LearningPathPanel 闂傚倸鍊搁崐椋庣矆娓氣偓瀹曨垶宕稿Δ鈧崒銊︾節婵犲倻澧曠痪鎯ь煼閺岀喖宕滆鐢盯鏌ｉ幘鍐叉殻闁哄本绋栫粻娑㈠箼閸愨敩锔界箾鐎涙鐭掔紒鐘崇墪椤繐煤椤忓嫮顦ㄩ梺鍦帛鐢帗娼忛崨瀛樷拺缂佸顑欓崕鎰版煙閻熺増鍠樼€殿喛顕ч鍏煎緞婵犲嫷妲┑鐘灱濞夋盯鏁冮敐鍡欑彾闁哄洢鍨洪埛鎺懨归敐鍥剁劸闁哄棝浜堕弻娑樜熼懡銈囩厜閻庤娲橀崹鍧楃嵁濡偐纾兼俊顖滃帶鐢姊绘担渚劸缂佺粯鍔欒棟妞ゆ牗绋撻々鎻捨旈敐鍛殲闁抽攱鍨块弻娑㈠箛椤撶偟绁烽柣銏╁灛閸旀垿寮诲☉姘ｅ亾閿濆骸浜濈€规洖鐭傞弻锛勪沪閻ｅ睗褏鈧娲橀〃鍡楊嚗閸曨剛绡€濞达絽澹婂Λ婊堟⒒閸屾艾鈧绮堟笟鈧畷顖炲锤濡も偓閸屻劍绻濇繝鍌滃缁炬儳顭烽弻鐔煎礈瑜忕敮娑㈡煟閹惧啿鏆ｉ柡灞剧缁犳盯骞欓崘鈹附绻涚€涙鐭掔紒鐘崇墪椤繐煤椤忓嫮顦ㄩ梺鍦帛鐢帗娼忛崨瀛樷拺缂佸顑欓崕鎰版煙閻熺増鍠樼€殿喛顕ч鍏煎緞婵犲嫷妲┑鐘灱濞夋盯鏁冮敐鍡欑彾闁哄洢鍨洪埛鎺懨归敐鍥剁劸闁哄棝浜堕弻娑樜熼懡銈囩厜閻庤娲橀崹鍧楃嵁濡偐纾兼俊顖滃帶鐢姊绘担渚劸缂佺粯鍔欒棟妞ゆ牗绋撻々鎻捨旈敐鍛殲闁抽攱鍨块弻娑㈠箛椤撶偟绁烽柣銏╁灛閸旀垿寮诲☉姘ｅ亾閿濆骸浜濈€规洖鐭傞弻锛勪沪閻ｅ睗褏鈧娲橀〃鍡楊嚗閸曨剛绡€濞达絽澹婂Λ婊堟⒒閸屾艾鈧绮堟笟鈧畷顖炲锤濡も偓閸屻劍绻濇繝鍌滃缁炬儳顭烽弻鐔煎礈瑜忕敮娑㈡煟閹惧啿鏆ｉ柡灞剧缁犳盯骞欓崘鈹附绻涚€涙鐭掔紒鐘崇墪椤繐煤椤忓嫮顦ㄩ梺鍦帛鐢帗娼忛崨瀛樷拺缂佸顑欓崕鎰版煙閻熺増鍠樼€殿喛顕ч鍏煎緞婵犲嫷妲┑鐘灱濞夋盯鏁冮敐鍡欑彾闁哄洢鍨洪埛鎺懨归敐鍥剁劸闁哄棝浜堕弻娑樜熼懡銈囩厜閻庤娲橀崹鍧楃嵁濡偐纾兼俊顖滃帶鐢姊绘担渚劸缂佺粯鍔欒棟妞ゆ牗绋撻々鎻捨旈敐鍛殲闁抽攱鍨块弻娑㈠箛椤撶偟绁烽柣銏╁灛閸旀垿寮诲☉姘ｅ亾閿濆骸浜濈€规洖鐭傞弻锛勪沪閻ｅ睗褏鈧娲橀〃鍡楊嚗閸曨剛绡€濞达絽澹婂Λ婊堟⒒閸屾艾鈧绮堟笟鈧畷顖炲锤濡も偓閸屻劍绻濇繝鍌滃缁炬儳顭烽弻鐔煎礈瑜忕敮娑㈡煟閹惧啿鏆ｉ柡灞剧缁犳盯骞欓崘鈹附绻涚€涙鐭掔紒鐘崇墪椤繐煤椤忓嫮顦ㄩ梺鍦帛鐢帗娼忛崨瀛樷拺缂佸顑欓崕鎰版煙閻熺増鍠樼€殿喛顕ч鍏煎緞婵犲嫷妲┑鐘灱濞夋盯鏁冮敐鍡欑彾闁哄洢鍨洪埛鎺懨归敐鍥剁劸闁哄棝浜堕弻娑樜熼懡銈囩厜閻庤娲橀崹鍧楃嵁濡偐纾兼俊顖滃帶鐢姊绘担渚劸缂佺粯鍔欒棟妞ゆ牗绋撻々鎻捨旈敐鍛殲闁抽攱鍨块弻娑㈠箛椤撶偟绁烽柣銏╁灛閸旀垿寮诲☉姘ｅ亾閿濆骸浜濈€规洖鐭傞弻锛勪沪閻ｅ睗褏鈧娲橀〃鍡楊嚗閸曨剛绡€濞达絽澹婂Λ婊堟⒒閸屾艾鈧绮堟笟鈧畷顖炲锤濡も偓閸屻劍绻濇繝鍌滃缁炬儳顭烽弻鐔煎礈瑜忕敮娑㈡煟閹惧啿鏆ｉ柡灞剧缁犳盯骞欓崘鈹附绻涚€涙鐭掔紒鐘崇墪椤繐煤椤忓嫮顦ㄩ梺鍦帛鐢帗娼忛崨瀛樷拺缂佸顑欓崕鎰版煙閻熺増鍠樼€殿喛顕ч鍏煎緞婵犲嫷妲┑鐘灱濞夋盯鏁冮敐鍡欑彾闁哄洢鍨洪埛鎺懨归敐鍥剁劸闁哄棝浜堕弻娑樜熼懡銈囩厜閻庤娲橀崹鍧楃嵁濡偐纾兼俊顖滃帶鐢姊绘担渚劸缂佺粯鍔欒棟妞ゆ牗绋撻々鎻捨旈敐鍛殲闁抽攱鍨块弻娑㈠箛椤撶偟绁烽柣銏╁灛閸旀垿寮诲☉姘ｅ亾閿濆骸浜濈€规洖鐭傞弻锛勪沪閻ｅ睗褏鈧娲橀〃鍡楊嚗閸曨剛绡€濞达絽澹婂Λ婊堟⒒閸屾艾鈧绮堟笟鈧畷顖炲锤濡も偓閸屻劍绻濇繝鍌滃缁炬儳顭烽弻鐔煎礈瑜忕敮娑㈡煟閹惧啿鏆ｉ柡灞剧缁犳盯骞欓崘鈹附绻涚€涙鐭掔紒鐘崇墪椤繐煤椤忓嫮顦ㄩ梺鍦帛鐢帗娼忛崨瀛樷拺缂佸顑欓崕鎰版煙閻熺増鍠樼€殿喛顕ч鍏煎緞婵犲嫷妲┑鐘灱濞夋盯鏁冮敐鍡欑彾闁哄洢鍨洪埛鎺懨归敐鍥剁劸闁哄棝浜堕弻娑樜熼懡銈囩厜閻庤娲橀崹鍧楃嵁濡偐纾兼俊顖滃帶鐢姊绘担渚劸缂佺粯鍔欒棟妞ゆ牗绋撻々鎻捨旈敐鍛殲闁抽攱鍨块弻娑㈠箛椤撶偟绁烽柣銏╁灛閸旀垿寮诲☉姘ｅ亾閿濆骸浜濈€规洖鐭傞弻锛勪沪閻ｅ睗褏鈧娲橀〃鍡楊嚗閸曨剛绡€濞达絽澹婂Λ婊堟⒒閸屾艾鈧绮堟笟鈧畷顖炲锤濡も偓閸屻劍绻濇繝鍌滃缁炬儳顭烽弻鐔煎礈瑜忕敮娑㈡煟閹惧啿鏆ｉ柡灞剧缁犳盯骞欓崘鈹附绻涚€涙鐭掔紒鐘崇墪椤繐煤椤忓嫮顦ㄩ梺鍦帛鐢帗娼忛崨瀛樷拺缂佸顑欓崕鎰版煙閻熺増鍠樼€殿喛顕ч鍏煎緞婵犲嫷妲┑鐘灱濞夋盯鏁冮敐鍡欑彾闁哄洢鍨洪埛鎺懨归敐鍥剁劸闁哄棝浜堕弻娑樜熼懡銈囩厜閻庤娲橀崹鍧楃嵁濡偐纾兼俊顖滃帶鐢姊绘担渚劸缂佺粯鍔欒棟妞ゆ牗绋撻々鎻捨旈敐鍛殲闁抽攱鍨块弻娑㈠箛椤撶偟绁烽柣銏╁灛閸旀垿寮诲☉姘ｅ亾閿濆骸浜濈€规洖鐭傞弻锛勪沪閻ｅ睗褏鈧娲橀〃鍡楊嚗閸曨剛绡€濞达絽澹婂Λ婊堟⒒閸屾艾鈧绮堟笟鈧畷顖炲锤濡も偓閸屻劍绻濇繝鍌滃缁?
+export function LearningPathPanel({
+  studentId,
+  pointName,
+  onOpenDiagnosePaper,
+  onOpenTheoryEditor,
+}: {
+  studentId: string
+  pointName: string
+  onOpenDiagnosePaper?: () => void
+  onOpenTheoryEditor?: () => void
+}) {
   const [activeStage, setActiveStage] = useState<LearningPathStageKey>('diagnose')
   const [remoteStages, setRemoteStages] = useState<LearningPathStage[]>([])
   const [localOverrides, setLocalOverrides] = useState<Record<string, {
@@ -566,11 +1139,35 @@ export function LearningPathPanel({ studentId, pointName }: { studentId: string;
     timeDisplayLabel?: string
   }>>({})
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
+  const [refreshing, setRefreshing] = useState(false)
+  const learningPathRefreshToken = useWorkbenchStore((state) => state.learningPathRefreshToken)
 
   useEffect(() => {
     setLocalOverrides({})
     setCollapsedGroups({})
   }, [studentId])
+
+  const reloadLearningPath = useCallback(async (keepCurrentStage = false) => {
+    const payload = await fetchStudentLearningPath(studentId, pointName)
+    const stages = Array.isArray(payload?.stages) ? payload.stages : []
+    setRemoteStages(stages)
+    if (keepCurrentStage) return stages
+
+    const preferred = stages.find((s) => s.groups.flatMap((g) => g.items || []).some((i) => i.status === 'current'))
+      || stages.find((s) => s.groups.flatMap((g) => g.items || []).some((i) => i.status !== 'done'))
+      || stages[0]
+    if (preferred) setActiveStage(preferred.stageKey)
+    return stages
+  }, [learningPathRefreshToken, pointName, studentId])
+
+  const handleRefreshLearningPath = useCallback(async (keepCurrentStage = true) => {
+    setRefreshing(true)
+    try {
+      await reloadLearningPath(keepCurrentStage)
+    } finally {
+      setRefreshing(false)
+    }
+  }, [reloadLearningPath])
 
   useEffect(() => {
     let active = true
@@ -588,7 +1185,18 @@ export function LearningPathPanel({ studentId, pointName }: { studentId: string;
       })
       .catch(() => { if (!active) return; setRemoteStages([]) })
     return () => { active = false }
-  }, [pointName, studentId])
+  }, [learningPathRefreshToken, pointName, studentId])
+
+  useEffect(() => {
+    function handleWindowFocus() {
+      void handleRefreshLearningPath(true)
+    }
+
+    window.addEventListener('focus', handleWindowFocus)
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus)
+    }
+  }, [handleRefreshLearningPath])
 
   const resolvedStages = useMemo(() => {
     return LEARNING_PATH_STAGE_ORDER
@@ -612,23 +1220,73 @@ export function LearningPathPanel({ studentId, pointName }: { studentId: string;
     [activeStage, resolvedStages],
   )
 
+  const stageItemMap = useMemo(() => {
+    const map = new Map<string, LearningPathItem>()
+    ;(stage?.groups || []).forEach((group) => {
+      ;(group.items || []).forEach((item) => {
+        const itemId = String(item.id || '').trim()
+        if (itemId) {
+          map.set(itemId, item)
+        }
+      })
+    })
+    return map
+  }, [stage])
+
+  const diagnoseNeedsPaperConfig = useMemo(() => {
+    const diagnoseStage = resolvedStages.find((entry) => entry.stageKey === 'diagnose')
+    if (!diagnoseStage) return false
+
+    const diagnoseItems = diagnoseStage.groups.flatMap((group) => group.items || [])
+    const requiredIds = ['diagnose_paper', 'diagnose_analysis_video', 'diagnose_reference_answer']
+
+    return requiredIds.some((itemId) => {
+      const item = diagnoseItems.find((entry) => String(entry.id || '').trim() === itemId)
+      if (!item) return true
+
+      const resource = item.resource || null
+      return !(
+        String(resource?.url || '').trim()
+        || String(resource?.videoId || '').trim()
+        || (Array.isArray(resource?.videoLessons) && resource.videoLessons.length > 0)
+      )
+    })
+  }, [resolvedStages])
+
   if (!stage || stageTabs.length === 0) {
     return (
       <div className="flex h-full items-center justify-center rounded-[var(--radius-card)] border border-dashed border-[var(--color-border)] text-sm text-[var(--color-text-muted)]">
-        暂无后端学习路径数据
+        暂无学习路径数据
       </div>
     )
   }
 
-  function handleResourceSaved(taskId: string, url: string, videoId: string) {
-    setLocalOverrides((prev) => ({
-      ...prev,
-      [taskId]: {
-        ...(prev[taskId] || {}),
-        url,
-        videoId,
-      },
-    }))
+  async function handleResourceSaved(item: LearningPathItem, expectedUrl: string, expectedVideoId: string) {
+    const stages = await reloadLearningPath(true)
+    const persistedItem = stages
+      .flatMap((stage) => stage.groups.flatMap((group) => group.items || []))
+      .find((stageItem) => String(stageItem.id || '').trim() === String(item.id || '').trim())
+
+    if (!persistedItem) {
+      throw new Error('保存后未能重新读取到当前学习路径任务')
+    }
+
+    const persistedUrl = item.actionType === 'live'
+      ? String(persistedItem.resource?.liveUrl ?? persistedItem.resource?.url ?? '').trim()
+      : item.actionType === 'replay'
+        ? String(persistedItem.resource?.replayUrl ?? persistedItem.resource?.url ?? '').trim()
+        : String(persistedItem.resource?.url ?? '').trim()
+    const persistedVideoId = String(persistedItem.resource?.videoId ?? '').trim()
+    const normalizedExpectedUrl = String(expectedUrl || '').trim()
+    const normalizedExpectedVideoId = String(expectedVideoId || '').trim()
+
+    if (normalizedExpectedUrl && persistedUrl !== normalizedExpectedUrl) {
+      throw new Error('保存请求已完成，但服务端回读结果里没有这份文件')
+    }
+
+    if (item.actionType === 'video' && normalizedExpectedVideoId && persistedVideoId !== normalizedExpectedVideoId) {
+      throw new Error('保存请求已完成，但服务端回读结果里没有这条视频配置')
+    }
   }
 
   function handleTimeSaved(taskId: string, timeLabel: string, timeType: LearningPathTimeType) {
@@ -647,68 +1305,137 @@ export function LearningPathPanel({ studentId, pointName }: { studentId: string;
     setCollapsedGroups((prev) => ({ ...prev, [groupTitle]: !prev[groupTitle] }))
   }
 
+  function getTheorySubGroupKey(sectionId: string, groupTitle: string) {
+    return `${sectionId}__${groupTitle}`
+  }
+
+  function toggleTheorySubGroup(sectionId: string, groupTitle: string) {
+    const key = getTheorySubGroupKey(sectionId, groupTitle)
+    setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
   function isGroupCollapsible(groupTitle: string) {
-    return activeStage === 'training' && !!groupTitle && groupTitle !== '实训路径'
+    return activeStage === 'training' && !!groupTitle && groupTitle !== 'Practice Path'
   }
 
   function isGroupCollapsed(group: LearningPathStage['groups'][number]) {
     if (collapsedGroups[group.title] !== undefined) return collapsedGroups[group.title]
-    // 默认：有 current 的展开，其余折叠
+    // 婵犵數濮甸鏍窗濡ゅ啯鏆滄俊銈呭暟閻瑩鏌熼悜妯镐粶闁逞屽墾缁犳挸鐣锋總绋课ㄦい鏃囧Г濞呭秴鈹戦悩鍨毄濠殿喚鏁搁崰濠傤吋婢跺﹦鏌у銈嗗笂閻掞箓宕ｈ箛鏃€鍙忔俊銈傚亾婵☆偅顨婇悰顔嘉旈崘顏嗭紲?current 闂傚倸鍊搁崐鐑芥倿閿曞倹鍎戠憸鐗堝笒缁€澶屸偓鍏夊亾闁逞屽墴閸┾偓妞ゆ帊绀侀崵顒勬煕閹捐泛鏋涙鐐叉瀹曠厧鈹戦幇顒佸€梻浣告啞缁牏绮堟担绯曟灁闁靛ň鏅滈埛鎴︽⒑椤愩倕浠滈柤娲诲灡閺呭爼骞橀鐣屽幐婵炶揪绲介幗婊嗗€村┑鐐差嚟婵绮婚幘璇茬濠电姴鍟欢鐐测攽閻樻彃顏柣鎰礃缁绘繈鎮介棃娑楀摋闂佽妞挎禍鐐差嚗婵犲啨鍋呴柛鎰ㄦ櫅娴狀參姊洪幐搴㈩梿濠殿喓鍊濆畷锝堢疀閺囨浜鹃柛蹇擃槸娴滈箖姊洪崨濠冨闁稿妫濋幃?
     const hasCurrent = (group.items || []).some((i) => i.status === 'current')
     return !hasCurrent
   }
 
-  // 把本地覆盖合并进 item.resource
+  function isTheorySubGroupCollapsed(sectionId: string, group: LearningPathStage['groups'][number]) {
+    const key = getTheorySubGroupKey(sectionId, group.title)
+    if (collapsedGroups[key] !== undefined) return collapsedGroups[key]
+    const hasCurrent = (group.items || []).some((item) => item.status === 'current')
+    return !hasCurrent
+  }
+
+  // 闂傚倸鍊搁崐鐑芥嚄閸洏鈧焦绻濋崒妤佺亙濠电偞鍨崹娲疾濠靛鐓忓璺虹墕閸旂敻鏌ら弶璺ㄤ虎闂囧鏌涜箛鎾虫倯缂傚秵鍨块弻鐔兼偡閹殿喖鐓熼梺鍝勭灱閸犲酣鎮鹃敓鐘茬妞ゆ梹鍎虫慨鍏肩節閻㈤潧浠滄俊顖氾躬瀹曟粓鎮㈤悡搴ゆ憰闂佹寧绻傞ˇ顖炴偂濞戙垺鐓曢悘鐐插⒔閻﹪鏌嶉鍕Ш婵﹨娅ｉ幏鐘诲灳閾忣偆浜梻鍌欑鎼存粎绱炴笟鈧獮鍐╁閹碱厽鏅梺閫炲苯澧撮柣娑卞櫍瀹曞崬鈽夊Ο纰卞悑婵＄偑鍊栧濠氭惞鎼淬劌鐤?item.resource
   function resolveItem(item: LearningPathItem): LearningPathItem {
-    const ov = localOverrides[item.id]
-    if (!ov) return item
-    const isLiveOrReplay = item.actionType === 'live' || item.actionType === 'replay'
+    const normalizedItem = normalizeTrainingExplainVideoItem(item)
+    const ov = localOverrides[normalizedItem.id]
+    if (!ov) return normalizedItem
+    const isLiveOrReplay = normalizedItem.actionType === 'live' || normalizedItem.actionType === 'replay'
     return {
-      ...item,
-      timeLabel: ov.timeLabel ?? item.timeLabel,
-      timeType: ov.timeType ?? item.timeType ?? getDefaultTimeType(item),
-      timeDisplayLabel: ov.timeDisplayLabel ?? item.timeDisplayLabel ?? buildTimeDisplayLabel(
-        (ov.timeType ?? item.timeType ?? getDefaultTimeType(item)) as LearningPathTimeType,
-        ov.timeLabel ?? item.timeLabel ?? '',
+      ...normalizedItem,
+      timeLabel: ov.timeLabel ?? normalizedItem.timeLabel,
+      timeType: ov.timeType ?? normalizedItem.timeType ?? getDefaultTimeType(normalizedItem),
+      timeDisplayLabel: ov.timeDisplayLabel ?? normalizedItem.timeDisplayLabel ?? buildTimeDisplayLabel(
+        (ov.timeType ?? normalizedItem.timeType ?? getDefaultTimeType(normalizedItem)) as LearningPathTimeType,
+        ov.timeLabel ?? normalizedItem.timeLabel ?? '',
       ),
       resource: {
-        resourceType: item.actionType === 'document' ? 'pdf' : item.actionType === 'video' ? 'video' : item.actionType,
-        title: item.title,
-        url: isLiveOrReplay ? (item.resource?.url ?? '') : (ov.url ?? item.resource?.url ?? ''),
-        videoId: ov.videoId ?? item.resource?.videoId,
-        liveUrl: item.actionType === 'live' ? (ov.url ?? item.resource?.liveUrl ?? '') : (item.resource?.liveUrl ?? ''),
-        replayUrl: item.actionType === 'replay' ? (ov.url ?? item.resource?.replayUrl ?? '') : (item.resource?.replayUrl ?? ''),
+        ...(normalizedItem.resource || {}),
+        resourceType: normalizedItem.actionType === 'document' || normalizedItem.actionType === 'report'
+          ? 'pdf'
+          : normalizedItem.actionType === 'video'
+            ? 'video'
+            : normalizedItem.actionType,
+        title: normalizedItem.title,
+        url: isLiveOrReplay ? (normalizedItem.resource?.url ?? '') : (ov.url ?? normalizedItem.resource?.url ?? ''),
+        videoId: ov.videoId ?? normalizedItem.resource?.videoId,
+        liveUrl: normalizedItem.actionType === 'live' ? (ov.url ?? normalizedItem.resource?.liveUrl ?? '') : (normalizedItem.resource?.liveUrl ?? ''),
+        replayUrl: normalizedItem.actionType === 'replay' ? (ov.url ?? normalizedItem.resource?.replayUrl ?? '') : (normalizedItem.resource?.replayUrl ?? ''),
       },
     }
   }
 
+  function getLatestUploadRecord(item: LearningPathItem | null | undefined): Record<string, unknown> | null {
+    const uploads = Array.isArray(item?.uploads) ? item.uploads : []
+    for (let index = uploads.length - 1; index >= 0; index -= 1) {
+      const upload = asPlainRecord(uploads[index])
+      if (upload) return upload
+    }
+    return null
+  }
+
+  function getSubmissionBridge(item: LearningPathItem) {
+    const itemId = String(item.id || '').trim()
+    const itemResult = asPlainRecord(item.result as unknown)
+    let submissionId = readStringField(itemResult, 'submissionId')
+    let fileName = readStringField(itemResult, 'fileName')
+    let reviewedFileName = readStringField(itemResult, 'reviewedFileName')
+    let reviewed = readStringField(itemResult, 'status') === 'reviewed'
+    let uploadCount = Array.isArray(item.uploads) ? item.uploads.length : 0
+
+    if (item.actionType === 'upload') {
+      const latestUpload = getLatestUploadRecord(item)
+      const feedbackItem = stageItemMap.get(getFeedbackTaskIdForUploadTask(itemId))
+      const feedbackResult = asPlainRecord(feedbackItem?.result as unknown)
+
+      submissionId = readStringField(latestUpload, 'submissionId', 'id') || readStringField(feedbackResult, 'submissionId')
+      fileName = readStringField(latestUpload, 'fileName') || readStringField(feedbackResult, 'fileName')
+      reviewedFileName = readStringField(feedbackResult, 'reviewedFileName')
+      reviewed = readStringField(feedbackResult, 'status') === 'reviewed'
+    } else if (item.actionType === 'feedback') {
+      const uploadItem = stageItemMap.get(getUploadTaskIdForFeedbackTask(itemId))
+      const latestUpload = getLatestUploadRecord(uploadItem)
+
+      uploadCount = Array.isArray(uploadItem?.uploads) ? uploadItem.uploads.length : uploadCount
+      submissionId = submissionId || readStringField(latestUpload, 'submissionId', 'id')
+      fileName = fileName || readStringField(latestUpload, 'fileName')
+      reviewedFileName = reviewedFileName || readStringField(itemResult, 'reviewedFileName')
+      reviewed = reviewed || readStringField(itemResult, 'status') === 'reviewed'
+    }
+
+    if (!submissionId) {
+      return null
+    }
+
+    return {
+      submissionId,
+      fileName,
+      reviewedFileName,
+      reviewed,
+      uploadCount,
+    }
+  }
+
   function renderItemContent(item: LearningPathItem) {
-    const status = statusStyles[item.status]
-    const isPdf = item.actionType === 'document'
+    const isPdf = item.actionType === 'document' || item.actionType === 'report'
     const isVideo = item.actionType === 'video'
     const isLive = item.actionType === 'live'
     const isReplay = item.actionType === 'replay'
-    const hasResource = (isLive || isReplay) ? !!item.resource?.url : isPdf ? !!item.resource?.url : !!item.resource?.videoId
+    const isUpload = item.actionType === 'upload'
+    const isFeedback = item.actionType === 'feedback'
+    const submissionBridge = getSubmissionBridge(item)
+    const videoLessonCount = Array.isArray(item.resource?.videoLessons) ? item.resource.videoLessons.length : 0
+    const hasResource = (isLive || isReplay)
+      ? !!item.resource?.url
+      : isPdf
+        ? !!item.resource?.url
+        : (!!item.resource?.videoId || videoLessonCount > 0)
+    const showItemTime = shouldShowItemTime(stage.stageKey, item)
+    const showItemTimeEditor = shouldShowItemTimeEditor(stage.stageKey, item)
 
     return (
       <div className="min-w-0 flex-1 pb-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium text-[var(--color-text-primary)]">{item.title}</span>
-          <span className={['rounded-full border px-2 py-0.5 text-[10px] font-medium', status.badge].join(' ')}>
-            {status.label}
-          </span>
-          {item.actionText && (
-            <span className="rounded-full border border-[var(--color-primary)]/20 bg-[var(--color-primary-light)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-primary)]">
-              {item.actionText}
-            </span>
-          )}
-          {item.secondaryActionText && (
-            <span className="rounded-full border border-[var(--color-border)] bg-white px-2 py-0.5 text-[10px] font-medium text-[var(--color-text-secondary)]">
-              {item.secondaryActionText}
-            </span>
-          )}
         </div>
-        {(item.timeDisplayLabel || item.timeLabel) && (
+        {showItemTime && (item.timeDisplayLabel || item.timeLabel) && (
           <div className="mt-1 flex items-center gap-1 text-[11px] text-amber-700">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
               <circle cx="12" cy="12" r="9" />
@@ -734,20 +1461,22 @@ export function LearningPathPanel({ studentId, pointName }: { studentId: string;
                       ? (item.resource?.replayUrl ?? item.resource?.url ?? '')
                       : isPdf
                         ? (item.resource?.url ?? '')
-                        : (item.resource?.videoId ? `videoId: ${item.resource.videoId}` : item.resource?.url ?? '')}
+                        : (item.resource?.videoId ? `视频 ID：${item.resource.videoId}` : (item.resource?.url ?? ''))}
                 </span>
               </div>
             )}
           </div>
         )}
         <div className="mt-1.5 flex flex-wrap gap-2">
-          <TaskTimeEditor
-            item={item}
-            studentId={studentId}
-            pointName={pointName}
-            stageKey={stage.stageKey}
-            onSaved={handleTimeSaved}
-          />
+          {showItemTimeEditor && (
+            <TaskTimeEditor
+              item={item}
+              studentId={studentId}
+              pointName={pointName}
+              stageKey={stage.stageKey}
+              onSaved={handleTimeSaved}
+            />
+          )}
           {(isPdf || isVideo || isLive || isReplay) && (
             <ResourceEditor
               item={item}
@@ -755,6 +1484,23 @@ export function LearningPathPanel({ studentId, pointName }: { studentId: string;
               pointName={pointName}
               stageKey={stage.stageKey}
               onSaved={handleResourceSaved}
+            />
+          )}
+          {isUpload && submissionBridge?.submissionId && (
+            <SubmissionViewer
+              submissionId={submissionBridge.submissionId}
+              fileName={submissionBridge.fileName}
+            />
+          )}
+          {isFeedback && submissionBridge?.submissionId && (
+            <FeedbackEditor
+              submissionId={submissionBridge.submissionId}
+              sourceFileName={submissionBridge.fileName}
+              initialReviewedFileName={submissionBridge.reviewedFileName}
+              initialReviewed={submissionBridge.reviewed}
+              onSubmitted={async () => {
+                await reloadLearningPath(true)
+              }}
             />
           )}
         </div>
@@ -777,6 +1523,8 @@ export function LearningPathPanel({ studentId, pointName }: { studentId: string;
 
   function renderGroupedTimeline(entry: Extract<StageDisplayEntry, { kind: 'group' }>, index: number, total: number) {
     const groupStatus = statusStyles[entry.status]
+    const timeTarget = getGroupedEntryTimeTarget(stage.stageKey, entry)
+    const resolvedTimeItem = timeTarget ? resolveItem(timeTarget.item) : null
 
     return (
       <div key={entry.id} className="flex gap-3 py-3">
@@ -787,7 +1535,30 @@ export function LearningPathPanel({ studentId, pointName }: { studentId: string;
         <div className="min-w-0 flex-1 pb-1">
           <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-white">
             <div className="border-b border-[var(--color-border)] bg-[var(--color-bg-left)] px-3 py-2">
-              <span className="text-xs font-semibold text-[var(--color-text-secondary)]">{entry.title}</span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-[var(--color-text-secondary)]">{entry.title}</span>
+                  {timeTarget && (
+                    <TaskTimeEditor
+                      item={resolvedTimeItem || timeTarget.item}
+                      studentId={studentId}
+                      pointName={pointName}
+                      stageKey={stage.stageKey}
+                      label={timeTarget.label}
+                      onSaved={handleTimeSaved}
+                    />
+                  )}
+                </div>
+                {resolvedTimeItem && (resolvedTimeItem.timeDisplayLabel || resolvedTimeItem.timeLabel) && (
+                  <div className="mt-1 flex items-center gap-1 text-[11px] text-amber-700">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                      <circle cx="12" cy="12" r="9" />
+                      <polyline points="12 7 12 12 15 15" />
+                    </svg>
+                    <span>{resolvedTimeItem.timeDisplayLabel || resolvedTimeItem.timeLabel}</span>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="px-3">
               {entry.items.map((rawItem, groupIndex) => {
@@ -819,20 +1590,44 @@ export function LearningPathPanel({ studentId, pointName }: { studentId: string;
     )
   }
 
-  function renderTopLevelGroupedCard(entry: Extract<StageCardEntry, { kind: 'group' }>) {
+
+  function renderConfiguredTopLevelGroupedCard(entry: Extract<StageCardEntry, { kind: 'group' }>) {
     const doneCount = entry.items.filter((item) => item.status === 'done').length
     const allDone = entry.items.length > 0 && doneCount === entry.items.length
+    const timeTarget = getGroupedEntryTimeTarget(stage.stageKey, entry)
+    const resolvedTimeItem = timeTarget ? resolveItem(timeTarget.item) : null
 
     return (
       <div key={entry.id} className="rounded-xl border border-[var(--color-border)]">
-        <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-bg-left)] px-3 py-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-[var(--color-text-secondary)]">{entry.title}</span>
-            {allDone && (
-              <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-600">已完成</span>
-            )}
-            {!allDone && doneCount > 0 && (
-              <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">{doneCount}/{entry.items.length}</span>
+        <div className="border-b border-[var(--color-border)] bg-[var(--color-bg-left)] px-3 py-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-[var(--color-text-secondary)]">{entry.title}</span>
+              {timeTarget && (
+                <TaskTimeEditor
+                  item={resolvedTimeItem || timeTarget.item}
+                  studentId={studentId}
+                  pointName={pointName}
+                  stageKey={stage.stageKey}
+                  label={timeTarget.label}
+                  onSaved={handleTimeSaved}
+                />
+              )}
+              {allDone && (
+                <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-600">已完成</span>
+              )}
+              {!allDone && doneCount > 0 && (
+                <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">{doneCount}/{entry.items.length}</span>
+              )}
+            </div>
+            {resolvedTimeItem && (resolvedTimeItem.timeDisplayLabel || resolvedTimeItem.timeLabel) && (
+              <div className="mt-1 flex items-center gap-1 text-[11px] text-amber-700">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                  <circle cx="12" cy="12" r="9" />
+                  <polyline points="12 7 12 12 15 15" />
+                </svg>
+                <span>{resolvedTimeItem.timeDisplayLabel || resolvedTimeItem.timeLabel}</span>
+              </div>
             )}
           </div>
         </div>
@@ -843,9 +1638,212 @@ export function LearningPathPanel({ studentId, pointName }: { studentId: string;
     )
   }
 
+  function renderTheorySectionCard(section: ReturnType<typeof buildTheorySections>[number]) {
+    const sectionItems = section.groups.flatMap((group) => group.items || [])
+    const doneCount = sectionItems.filter((item) => item.status === 'done').length
+    const allDone = sectionItems.length > 0 && doneCount === sectionItems.length
+    const resolvedTimeItem = section.timeTarget ? resolveItem(section.timeTarget) : null
+    const showsNestedGroups = section.id === 'theory_section_lessons'
+    const canEditTheoryLessons = section.id === 'theory_section_lessons' && typeof onOpenTheoryEditor === 'function'
+
+    return (
+      <div key={section.id} className="rounded-xl border border-[var(--color-border)]">
+        <div className="border-b border-[var(--color-border)] bg-[var(--color-bg-left)] px-3 py-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-[var(--color-text-secondary)]">{section.title}</span>
+                {section.timeTarget && (
+                  <TaskTimeEditor
+                    item={resolvedTimeItem || section.timeTarget}
+                    studentId={studentId}
+                    pointName={pointName}
+                    stageKey={stage.stageKey}
+                    label={`${section.title}时间`}
+                    onSaved={handleTimeSaved}
+                  />
+                )}
+                {allDone && (
+                  <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-600">已完成</span>
+                )}
+                {!allDone && doneCount > 0 && (
+                  <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">{doneCount}/{sectionItems.length}</span>
+                )}
+              </div>
+              {resolvedTimeItem && (resolvedTimeItem.timeDisplayLabel || resolvedTimeItem.timeLabel) && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-amber-700">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                    <circle cx="12" cy="12" r="9" />
+                    <polyline points="12 7 12 12 15 15" />
+                  </svg>
+                  <span>{resolvedTimeItem.timeDisplayLabel || resolvedTimeItem.timeLabel}</span>
+                </div>
+              )}
+            </div>
+            {canEditTheoryLessons && (
+              <button
+                type="button"
+                onClick={() => onOpenTheoryEditor?.()}
+                className="shrink-0 rounded-xl border border-[var(--color-primary)]/20 bg-[var(--color-primary-light)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-primary)] transition-opacity hover:opacity-90"
+              >
+                调整
+              </button>
+            )}
+          </div>
+        </div>
+        {showsNestedGroups ? (
+          <div className="space-y-3 px-3 py-3">
+            {section.groups.map((group) => {
+              const items = group.items || []
+              const subgroupDoneCount = items.filter((item) => item.status === 'done').length
+              const subgroupAllDone = items.length > 0 && subgroupDoneCount === items.length
+              const subgroupCollapsed = isTheorySubGroupCollapsed(section.id, group)
+
+              return (
+                <div key={`${section.id}_${group.title}`} className="rounded-xl border border-[var(--color-border)] bg-white">
+                  <div
+                    className="flex cursor-pointer select-none items-center justify-between gap-3 border-b border-[var(--color-border)] bg-white px-3 py-2 hover:bg-[var(--color-bg-hover,#f8fafc)]"
+                    onClick={() => toggleTheorySubGroup(section.id, group.title)}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold text-[var(--color-text-secondary)]">{group.title}</span>
+                      {subgroupAllDone && (
+                        <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-600">已完成</span>
+                      )}
+                      {!subgroupAllDone && subgroupDoneCount > 0 && (
+                        <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">{subgroupDoneCount}/{items.length}</span>
+                      )}
+                    </div>
+                    <svg
+                      width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                      strokeLinecap="round" strokeLinejoin="round"
+                      className={['text-[var(--color-text-muted)] transition-transform', subgroupCollapsed ? '' : 'rotate-180'].join(' ')}
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </div>
+                  {!subgroupCollapsed && (
+                    <div className="px-3 py-1">
+                      {items.map((rawItem, index) => renderTimelineItem(resolveItem(rawItem), index, items.length))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="px-3 py-1">
+            {sectionItems.map((rawItem, index) => renderTimelineItem(resolveItem(rawItem), index, sectionItems.length))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  function renderStageContent() {
+    if (stage.stageKey === 'theory') {
+      return buildTheorySections(stage.groups).map((section) => renderTheorySectionCard(section))
+    }
+
+    return stage.groups.map((group) => {
+      const displayGroup = group
+      const collapsible = isGroupCollapsible(displayGroup.title)
+      const collapsed = collapsible && isGroupCollapsed(displayGroup)
+      const items = displayGroup.items || []
+      const doneCount = items.filter((i) => i.status === 'done').length
+      const allDone = items.length > 0 && doneCount === items.length
+      const shouldPromoteGroupedCards = stage.stageKey === 'diagnose' || stage.stageKey === 'training'
+      const displayEntries = stage.stageKey === 'diagnose'
+        ? buildDiagnoseDisplayEntries(items)
+        : stage.stageKey === 'training'
+          ? buildTrainingDisplayEntries(items)
+          : items.map((item) => ({ kind: 'item', item } as StageDisplayEntry))
+      const cardEntries = buildStageCardEntries(displayEntries)
+
+      if (shouldPromoteGroupedCards) {
+        return (
+          <div key={displayGroup.title} className="space-y-3">
+            {cardEntries.map((entry) => {
+              if (entry.kind === 'group') {
+                return renderConfiguredTopLevelGroupedCard(entry)
+              }
+              return renderItemsCard(entry.items, entry.id)
+            })}
+          </div>
+        )
+      }
+
+      const groupTimeTarget = getStageGroupTimeTarget(stage.stageKey, items)
+      const resolvedGroupTimeItem = groupTimeTarget ? resolveItem(groupTimeTarget.item) : null
+
+      return (
+        <div key={displayGroup.title} className="rounded-xl border border-[var(--color-border)]">
+          <div
+            className={[
+              'flex items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg-left)] px-3 py-2',
+              collapsible ? 'cursor-pointer select-none hover:bg-[var(--color-bg-hover,#f8fafc)]' : '',
+            ].join(' ')}
+            onClick={collapsible ? () => toggleGroup(displayGroup.title) : undefined}
+          >
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-[var(--color-text-secondary)]">{displayGroup.title}</span>
+                {collapsible && allDone && (
+                  <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-600">已完成</span>
+                )}
+                {collapsible && !allDone && doneCount > 0 && (
+                  <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">{doneCount}/{items.length}</span>
+                )}
+              </div>
+              {resolvedGroupTimeItem && (resolvedGroupTimeItem.timeDisplayLabel || resolvedGroupTimeItem.timeLabel) && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-amber-700">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                    <circle cx="12" cy="12" r="9" />
+                    <polyline points="12 7 12 12 15 15" />
+                  </svg>
+                  <span>{resolvedGroupTimeItem.timeDisplayLabel || resolvedGroupTimeItem.timeLabel}</span>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
+              {groupTimeTarget && (
+                <TaskTimeEditor
+                  item={resolvedGroupTimeItem || groupTimeTarget.item}
+                  studentId={studentId}
+                  pointName={pointName}
+                  stageKey={stage.stageKey}
+                  label={groupTimeTarget.label}
+                  onSaved={handleTimeSaved}
+                />
+              )}
+              {collapsible && (
+                <svg
+                  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  className={['text-[var(--color-text-muted)] transition-transform', collapsed ? '' : 'rotate-180'].join(' ')}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              )}
+            </div>
+          </div>
+          {!collapsed && (
+            <div className="px-3 py-1">
+              {displayEntries.map((entry, index, displayEntriesList) => {
+                if (entry.kind === 'group') {
+                  return renderGroupedTimeline(entry, index, displayEntriesList.length)
+                }
+                return renderTimelineItem(resolveItem(entry.item), index, displayEntriesList.length)
+              })}
+            </div>
+          )}
+        </div>
+      )
+    })
+  }
+
   return (
     <div>
-      {/* Stage tabs */}
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           {stageTabs.map((tab) => {
@@ -864,89 +1862,48 @@ export function LearningPathPanel({ studentId, pointName }: { studentId: string;
             )
           })}
         </div>
-        <span className="flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[9px] text-green-600">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
-          已同步学生端
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void handleRefreshLearningPath(true)}
+            disabled={refreshing}
+            className="rounded-full border border-[var(--color-border)] bg-white px-2.5 py-1 text-[10px] font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {refreshing ? '刷新中...' : '刷新学习路径'}
+          </button>
+          <span className="flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[9px] text-green-600">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+            已同步学生端
+          </span>
+        </div>
       </div>
 
-      {/* Stage content */}
-      <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-white">
-
-        <div className="space-y-3 p-3">
-          {stage.groups.map((group) => {
-            const displayGroup = stage.stageKey === 'theory' ? normalizeTheoryGroup(group) : group
-            const collapsible = isGroupCollapsible(displayGroup.title)
-            const collapsed   = collapsible && isGroupCollapsed(displayGroup)
-            const items       = displayGroup.items || []
-            const doneCount   = items.filter((i) => i.status === 'done').length
-            const allDone     = items.length > 0 && doneCount === items.length
-            const shouldPromoteGroupedCards = stage.stageKey === 'diagnose' || stage.stageKey === 'training'
-            const displayEntries = stage.stageKey === 'diagnose'
-              ? buildDiagnoseDisplayEntries(items)
-              : stage.stageKey === 'training'
-                ? buildTrainingDisplayEntries(items)
-                : items.map((item) => ({ kind: 'item', item } as StageDisplayEntry))
-            const cardEntries = buildStageCardEntries(displayEntries)
-
-            if (shouldPromoteGroupedCards) {
-              return (
-                <div key={displayGroup.title} className="space-y-3">
-                  {cardEntries.map((entry) => {
-                    if (entry.kind === 'group') {
-                      return renderTopLevelGroupedCard(entry)
-                    }
-
-                    return renderItemsCard(entry.items, entry.id)
-                  })}
-                </div>
-              )
-            }
-
-            return (
-              <div key={displayGroup.title} className="rounded-xl border border-[var(--color-border)]">
-                <div
-                  className={[
-                    'flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-bg-left)] px-3 py-2',
-                    collapsible ? 'cursor-pointer select-none hover:bg-[var(--color-bg-hover,#f8fafc)]' : '',
-                  ].join(' ')}
-                  onClick={collapsible ? () => toggleGroup(displayGroup.title) : undefined}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-[var(--color-text-secondary)]">{displayGroup.title}</span>
-                    {collapsible && allDone && (
-                      <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-600">已完成</span>
-                    )}
-                    {collapsible && !allDone && doneCount > 0 && (
-                      <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-600">{doneCount}/{items.length}</span>
-                    )}
-                  </div>
-                  {collapsible && (
-                    <svg
-                      width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-                      strokeLinecap="round" strokeLinejoin="round"
-                      className={['text-[var(--color-text-muted)] transition-transform', collapsed ? '' : 'rotate-180'].join(' ')}
-                    >
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                  )}
-                </div>
-                {!collapsed && (
-                  <div className="px-3 py-1">
-                    {displayEntries.map((entry, index, displayEntriesList) => {
-                      if (entry.kind === 'group') {
-                        return renderGroupedTimeline(entry, index, displayEntriesList.length)
-                      }
-
-                      return renderTimelineItem(resolveItem(entry.item), index, displayEntriesList.length)
-                    })}
-                  </div>
-                )}
+      {onOpenDiagnosePaper && activeStage === 'diagnose' && diagnoseNeedsPaperConfig ? (
+        <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-amber-900">诊断卷还没有配齐</div>
+              <div className="mt-1 text-xs leading-5 text-amber-800">
+                先给学生选择诊断老师并配置诊断试卷、解析课和参考答案，保存后这里会同步显示。
               </div>
-            )
-          })}
+            </div>
+            <button
+              type="button"
+              onClick={onOpenDiagnosePaper}
+              className="shrink-0 rounded-xl bg-amber-500 px-4 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+            >
+              去配卷
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-white">
+        <div className="space-y-3 p-3">
+          {renderStageContent()}
         </div>
       </div>
     </div>
   )
 }
+

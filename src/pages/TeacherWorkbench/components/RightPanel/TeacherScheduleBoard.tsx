@@ -57,6 +57,9 @@ const HOUR_COUNT = HOUR_END - HOUR_START
 const DEFAULT_VISIBLE_HOUR = 9
 const VISIBLE_HOUR_COUNT = 12
 const FALLBACK_HOUR_HEIGHT = 60
+const TIMELINE_LABEL_WIDTH = 64
+const COLUMN_DIVIDER_CLASS = 'border-[#d7e0ea]'
+const TIMELINE_DIVIDER_CLASS = 'border-[#d1dae6] shadow-[1px_0_0_0_#e6edf5]'
 const DAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 const HOURS = Array.from({ length: HOUR_COUNT }, (_, index) => HOUR_START + index)
 const TEACHER_COLORS = ['#e8845a', '#d79c69', '#5fa8d3', '#8a7bd1', '#63c1c7', '#5fbf84']
@@ -295,7 +298,7 @@ function EventActionModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onCancel}>
       <div className="absolute inset-0 bg-black/25" />
       <div
-        className="relative w-80 rounded-[var(--radius-card)] bg-white shadow-lg"
+        className="relative w-[min(520px,94vw)] rounded-[var(--radius-card)] bg-white shadow-lg"
         onClick={(eventObject) => eventObject.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
@@ -385,7 +388,7 @@ function AddSlotModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onCancel}>
       <div className="absolute inset-0 bg-black/20" />
       <div
-        className="relative w-80 rounded-[var(--radius-card)] bg-white p-4 shadow-lg"
+        className="relative w-[min(560px,94vw)] rounded-[var(--radius-card)] bg-white p-4 shadow-lg"
         onClick={(eventObject) => eventObject.stopPropagation()}
       >
         <div className="mb-3 text-sm font-semibold text-[var(--color-text-primary)]">
@@ -461,7 +464,7 @@ function EventBlock({
 
   return (
     <div
-      className="absolute left-0.5 right-0.5 cursor-pointer overflow-hidden rounded-md px-2 py-1.5 text-white hover:brightness-95"
+      className="absolute left-0.5 right-0.5 z-20 cursor-pointer overflow-hidden rounded-md px-2 py-1.5 text-white hover:brightness-95"
       style={{
         top: layout.top,
         height: layout.height,
@@ -539,15 +542,20 @@ function WeekView({
     })
     return map
   }, [events])
+  const gridTemplateColumns = `64px repeat(${days.length}, minmax(0, 1fr))`
 
   return (
     <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-auto">
-      <div ref={headerRef} className="sticky top-0 z-10 flex border-b border-[var(--color-border)] bg-white">
-        <div className="w-16 shrink-0 border-r border-[var(--color-border)]" />
+      <div
+        ref={headerRef}
+        className="sticky top-0 z-10 grid border-b border-[var(--color-border)] bg-white"
+        style={{ gridTemplateColumns }}
+      >
+        <div />
         {days.map((day) => (
           <div
             key={day.toISOString()}
-            className="flex flex-1 flex-col items-center border-r border-[var(--color-border)] py-2 last:border-r-0"
+            className={`flex flex-col items-center border-l ${COLUMN_DIVIDER_CLASS} py-2`}
           >
             <span className="text-[13px] font-medium text-[var(--color-text-muted)]">{DAY_NAMES[getDay(day)]}</span>
             <div
@@ -562,13 +570,19 @@ function WeekView({
         ))}
       </div>
 
-      <div className="relative flex" style={{ height: totalHeight }}>
+      <div
+        className="relative grid"
+        style={{ height: totalHeight, gridTemplateColumns, gridTemplateRows: `${totalHeight}px` }}
+      >
         <div
           ref={defaultAnchorRef}
           className="pointer-events-none absolute left-0 right-0"
           style={{ top: defaultScrollTop, height: 1 }}
         />
-        <div className="sticky left-0 z-10 w-16 shrink-0 border-r border-[var(--color-border)] bg-white">
+        <div
+          className={`sticky left-0 z-10 self-stretch border-r ${TIMELINE_DIVIDER_CLASS} bg-white`}
+          style={{ width: TIMELINE_LABEL_WIDTH }}
+        >
           {HOURS.map((hour) => (
             <div
               key={hour}
@@ -580,6 +594,15 @@ function WeekView({
           ))}
         </div>
 
+        <div
+          className="pointer-events-none absolute inset-y-0 right-0 z-0 grid"
+          style={{ left: TIMELINE_LABEL_WIDTH, gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}
+        >
+          {days.map((day) => (
+            <div key={`${day.toISOString()}_guide`} className={`h-full self-stretch border-l ${COLUMN_DIVIDER_CLASS}`} />
+          ))}
+        </div>
+
         {days.map((day) => {
           const date = format(day, 'yyyy-MM-dd')
           const dayEvents = (eventsByDate[date] ?? []).filter((event) => getEventLayout(event.startTime, event.endTime, hourHeight))
@@ -587,7 +610,7 @@ function WeekView({
           return (
             <div
               key={date}
-              className="relative flex-1 border-r border-[var(--color-border)] last:border-r-0"
+              className="relative z-10 h-full self-stretch"
               onClick={(eventObject) => {
                 if (readOnly) return
                 const rect = eventObject.currentTarget.getBoundingClientRect()
@@ -619,7 +642,7 @@ function WeekView({
 
               {pendingSlot?.date === date ? (
                 <div
-                  className="absolute left-0.5 right-0.5 rounded border-2 border-dashed border-[var(--color-primary)] bg-[var(--color-primary-light)] px-2 py-1.5"
+                  className="absolute left-0.5 right-0.5 z-20 rounded border-2 border-dashed border-[var(--color-primary)] bg-[var(--color-primary-light)] px-2 py-1.5"
                   style={getEventLayout(pendingSlot.startTime, pendingSlot.endTime, hourHeight) ?? undefined}
                 >
                   <div className="truncate text-sm font-semibold text-[var(--color-primary)]">新排课</div>
@@ -685,9 +708,13 @@ function DayView({
 
   return (
     <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-auto">
-      <div ref={headerRef} className="sticky top-0 z-10 flex border-b border-[var(--color-border)] bg-white">
-        <div className="w-16 shrink-0 border-r border-[var(--color-border)]" />
-        <div className="flex flex-1 flex-col items-center border-r border-[var(--color-border)] py-2">
+      <div
+        ref={headerRef}
+        className="sticky top-0 z-10 grid border-b border-[var(--color-border)] bg-white"
+        style={{ gridTemplateColumns: '64px minmax(0, 1fr)' }}
+      >
+        <div />
+        <div className={`flex flex-col items-center border-l ${COLUMN_DIVIDER_CLASS} py-2`}>
           <span className="text-[13px] font-medium text-[var(--color-text-muted)]">{DAY_NAMES[getDay(date)]}</span>
           <div
             className={[
@@ -700,13 +727,19 @@ function DayView({
         </div>
       </div>
 
-      <div className="relative flex" style={{ height: totalHeight }}>
+      <div
+        className="relative grid"
+        style={{ height: totalHeight, gridTemplateColumns: '64px minmax(0, 1fr)', gridTemplateRows: `${totalHeight}px` }}
+      >
         <div
           ref={defaultAnchorRef}
           className="pointer-events-none absolute left-0 right-0"
           style={{ top: defaultScrollTop, height: 1 }}
         />
-        <div className="sticky left-0 z-10 w-16 shrink-0 border-r border-[var(--color-border)] bg-white">
+        <div
+          className={`sticky left-0 z-10 self-stretch border-r ${TIMELINE_DIVIDER_CLASS} bg-white`}
+          style={{ width: TIMELINE_LABEL_WIDTH }}
+        >
           {HOURS.map((hour) => (
             <div
               key={hour}
@@ -718,7 +751,7 @@ function DayView({
           ))}
         </div>
         <div
-          className="relative flex-1 border-r border-[var(--color-border)]"
+          className={`relative h-full self-stretch border-l ${COLUMN_DIVIDER_CLASS}`}
           onClick={(eventObject) => {
             if (readOnly) return
             const rect = eventObject.currentTarget.getBoundingClientRect()
@@ -750,7 +783,7 @@ function DayView({
 
           {pendingSlot?.date === dayKey ? (
             <div
-              className="absolute left-1 right-1 rounded border-2 border-dashed border-[var(--color-primary)] bg-[var(--color-primary-light)] px-2 py-1.5"
+              className="absolute left-1 right-1 z-20 rounded border-2 border-dashed border-[var(--color-primary)] bg-[var(--color-primary-light)] px-2 py-1.5"
               style={getEventLayout(pendingSlot.startTime, pendingSlot.endTime, hourHeight) ?? undefined}
             >
               <div className="text-sm font-semibold text-[var(--color-primary)]">新排课</div>

@@ -148,21 +148,6 @@ function contactIdByStudentId(contacts: import('../types').ContactItem[]): Recor
   }, {})
 }
 
-function mapTeamRole(role: string | null | undefined): string {
-  switch (role) {
-    case 'coach':
-      return '\u5e26\u6559\u8001\u5e08'
-    case 'diagnosis':
-      return '\u8bca\u65ad\u8001\u5e08'
-    case 'manager':
-      return '\u5b66\u7ba1'
-    case 'principal':
-      return '\u6821\u957f'
-    default:
-      return role || '\u8001\u5e08'
-  }
-}
-
 function mapSubmissionReviewType(reviewType: string | null | undefined): QuestionAnswer['questionType'] {
   switch (reviewType) {
     case '\u5165\u5b66\u8bca\u65ad':
@@ -178,7 +163,10 @@ function mapSubmissionReviewType(reviewType: string | null | undefined): Questio
   }
 }
 
-function buildSubmissionTitle(reviewType: unknown, checkpoint: unknown, fileName: unknown): string {
+function buildSubmissionTitle(reviewType: unknown, checkpoint: unknown, fileName: unknown, taskLabel: unknown): string {
+  const resolvedTaskLabel = typeof taskLabel === 'string' ? taskLabel.trim() : ''
+  if (resolvedTaskLabel) return resolvedTaskLabel
+
   const fileTitle = typeof fileName === 'string' ? fileName.replace(/\.[^.]+$/, '') : ''
   if (fileTitle) return fileTitle
 
@@ -232,6 +220,8 @@ interface WorkbenchState {
   clearSelectedContact: () => void
   restoreLastChat: () => void
   openTaskModal: (taskKey: TaskKey) => void
+  diagnosePaperItem: TaskListItem | null
+  openDiagnosePaperModal: (item: TaskListItem) => void
   closeTaskModal: () => void
   studentFeedbackOpen: boolean
   openStudentFeedbackModal: () => void
@@ -249,11 +239,16 @@ interface WorkbenchState {
   handoutUploadItem: TaskListItem | null
   openHandoutUpload: (item: TaskListItem) => void
   closeHandoutUpload: () => void
+  reportUploadItem: TaskListItem | null
+  openReportUpload: (item: TaskListItem) => void
+  closeReportUpload: () => void
   replayUploadItem: TaskListItem | null
   openReplayUpload: (item: TaskListItem) => void
   closeReplayUpload: () => void
   targetStudentId: string | null
   targetLearningPathPointName: string
+  learningPathRefreshToken: number
+  refreshLearningPath: () => void
   openStudentProfile: (studentId: string, pointName?: string) => void
   clearTargetStudent: () => void
   clearTargetLearningPathPointName: () => void
@@ -310,10 +305,11 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   selectedContactId: null,
   lastContactId: null,
   openTaskKey: null,
+  diagnosePaperItem: null,
   studentFeedbackOpen: false,
   calendarEvents: [],
   teacherName: getTeacherNameFromToken(),
-  taskCounts: { pendingClass: 0, pendingReply: 0, abnormalUser: 0, pendingReview: 0, pendingReport: 0, pendingAssign: 0, pendingLink: 0, liveDrill: 0, pendingHandout: 0, pendingFeedback: 0 },
+  taskCounts: { pendingClass: 0, pendingReply: 0, abnormalUser: 0, pendingReview: 0, pendingReport: 0, pendingAssign: 0, pendingDiagnosePaper: 0, pendingLink: 0, liveDrill: 0, pendingHandout: 0, pendingFeedback: 0 },
   loadTaskCounts: async () => {
     const data = await api.get<{
       pendingClass?: number
@@ -323,6 +319,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       abnormal?: number
       pendingReply?: number
       pendingAssign?: number
+      pendingDiagnosePaper?: number
       pendingLink?: number
       pendingHandout?: number
       pendingFeedback?: number
@@ -337,6 +334,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
           pendingReport:  data.pendingReport ?? 0,
           liveDrill:      0,
           pendingAssign:  data.pendingAssign ?? 0,
+          pendingDiagnosePaper: data.pendingDiagnosePaper ?? 0,
           pendingLink:    data.pendingLink   ?? 0,
           pendingHandout: data.pendingHandout ?? 0,
           pendingFeedback: data.pendingFeedback ?? 0,
@@ -351,6 +349,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
     pendingReview: [],
     pendingReport: [],
     pendingAssign: [],
+    pendingDiagnosePaper: [],
     pendingLink: [],
     liveDrill: [],
     pendingHandout: [],
@@ -367,6 +366,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         pendingReview: Array.isArray(data.pendingReview) ? data.pendingReview : [],
         pendingReport: Array.isArray(data.pendingReport) ? data.pendingReport : [],
         pendingAssign: Array.isArray(data.pendingAssign) ? data.pendingAssign : [],
+        pendingDiagnosePaper: Array.isArray(data.pendingDiagnosePaper) ? data.pendingDiagnosePaper : [],
         pendingLink: Array.isArray(data.pendingLink) ? data.pendingLink : [],
         liveDrill: [],
         pendingHandout: Array.isArray(data.pendingHandout) ? data.pendingHandout : [],
@@ -707,11 +707,16 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   },
   openTaskModal: (taskKey) => set(
     taskKey === 'pendingFeedback'
-      ? { openTaskKey: null, studentFeedbackOpen: true }
-      : { openTaskKey: taskKey, studentFeedbackOpen: false },
+      ? { openTaskKey: null, studentFeedbackOpen: true, diagnosePaperItem: null }
+      : { openTaskKey: taskKey, studentFeedbackOpen: false, diagnosePaperItem: null },
   ),
-  closeTaskModal: () => set({ openTaskKey: null }),
-  openStudentFeedbackModal: () => set({ studentFeedbackOpen: true, openTaskKey: null }),
+  openDiagnosePaperModal: (item) => set({
+    openTaskKey: 'pendingDiagnosePaper',
+    studentFeedbackOpen: false,
+    diagnosePaperItem: item,
+  }),
+  closeTaskModal: () => set({ openTaskKey: null, diagnosePaperItem: null }),
+  openStudentFeedbackModal: () => set({ studentFeedbackOpen: true, openTaskKey: null, diagnosePaperItem: null }),
   closeStudentFeedbackModal: () => set({ studentFeedbackOpen: false }),
   addCalendarEvent: async (event) => {
     set((s) => ({ calendarEvents: [...s.calendarEvents, event] }))
@@ -784,11 +789,16 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
   handoutUploadItem: null,
   openHandoutUpload: (item) => set({ handoutUploadItem: item }),
   closeHandoutUpload: () => set({ handoutUploadItem: null }),
+  reportUploadItem: null,
+  openReportUpload: (item) => set({ reportUploadItem: item }),
+  closeReportUpload: () => set({ reportUploadItem: null }),
   replayUploadItem: null,
   openReplayUpload: (item) => set({ replayUploadItem: item }),
   closeReplayUpload: () => set({ replayUploadItem: null }),
   targetStudentId: null,
   targetLearningPathPointName: '',
+  learningPathRefreshToken: 0,
+  refreshLearningPath: () => set((state) => ({ learningPathRefreshToken: state.learningPathRefreshToken + 1 })),
   openStudentProfile: (studentId, pointName) => set({
     targetStudentId: studentId,
     targetLearningPathPointName: String(pointName || ''),
@@ -909,7 +919,7 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
       const student = data.student ?? null
       const answers: QuestionAnswer[] = (data.submissions ?? []).map((submission) => ({
         id: String(submission.id),
-        questionTitle: buildSubmissionTitle(submission.review_type, submission.checkpoint, submission.file_name),
+        questionTitle: buildSubmissionTitle(submission.review_type, submission.checkpoint, submission.file_name, submission.task_label),
         questionType: mapSubmissionReviewType(typeof submission.review_type === 'string' ? submission.review_type : null),
         studentAnswer: submission.file_name ? '\u5df2\u63d0\u4ea4\u6587\u4ef6\uff1a' : '\u5df2\u63d0\u4ea4\u4f5c\u7b54',
         submittedAt: String(submission.created_at ?? new Date().toISOString()),
@@ -917,23 +927,55 @@ export const useWorkbenchStore = create<WorkbenchState>((set, get) => ({
         score: submission.score === null || submission.score === undefined ? undefined : Number(submission.score),
         teacherComment: submission.feedback ? String(submission.feedback) : undefined,
         reviewedAt: submission.graded_at ? String(submission.graded_at) : undefined,
+        checkpoint: submission.checkpoint ? String(submission.checkpoint) : undefined,
+        pointName: submission.point_name ? String(submission.point_name) : undefined,
+        stageKey: submission.stage_key ? String(submission.stage_key) : undefined,
+        taskId: submission.task_id ? String(submission.task_id) : undefined,
+        feedbackTaskId: submission.feedback_task_id ? String(submission.feedback_task_id) : undefined,
+        reviewedFileName: submission.reviewed_file_name ? String(submission.reviewed_file_name) : undefined,
+        fileName: submission.file_name ? String(submission.file_name) : undefined,
       }))
       const detailMeta: StudentDetailMeta = {
         joinDate: student?.created_at ? String(student.created_at).slice(0, 10) : null,
         sessionCount: Number(data.sessionCount ?? 0),
         totalHours: Number(data.totalHours ?? 0),
-        courses: (data.courses ?? []).map((course) => ({
-          id: String(course.id),
-          name: String(course.name ?? ''),
-          subject: String(course.subject ?? ''),
-          progress: Number(course.progress ?? 0),
-          status: ((course.status as 'in_progress' | 'completed' | 'failed') ?? 'in_progress'),
-        })),
+        courses: (data.courses ?? []).map((course) => {
+          const rawLearningPathProgress = course.learningPathProgress && typeof course.learningPathProgress === 'object'
+            ? course.learningPathProgress as Record<string, unknown>
+            : null
+          const learningPathProgress = rawLearningPathProgress
+            ? {
+                pointName: String(rawLearningPathProgress.pointName ?? ''),
+                progressPercent: Number(rawLearningPathProgress.progressPercent ?? 0),
+                totalTaskCount: Number(rawLearningPathProgress.totalTaskCount ?? 0),
+                doneTaskCount: Number(rawLearningPathProgress.doneTaskCount ?? 0),
+                allDone: Boolean(rawLearningPathProgress.allDone),
+                currentTaskId: String(rawLearningPathProgress.currentTaskId ?? ''),
+                currentTaskTitle: String(rawLearningPathProgress.currentTaskTitle ?? ''),
+                currentStageKey: String(rawLearningPathProgress.currentStageKey ?? ''),
+                currentStageLabel: String(rawLearningPathProgress.currentStageLabel ?? ''),
+                updatedAt: String(rawLearningPathProgress.updatedAt ?? ''),
+              }
+            : null
+
+          return {
+            id: String(course.id),
+            name: String(course.name ?? ''),
+            subject: String(course.subject ?? ''),
+            progress: Number(learningPathProgress?.progressPercent ?? course.progress ?? 0),
+            status: ((course.status as 'in_progress' | 'completed' | 'failed' | 'pending') ?? 'in_progress'),
+            learningPathProgress,
+            assignedTeacherId: course.assignedTeacherId ? String(course.assignedTeacherId) : null,
+            assignedTeacherName: course.assignedTeacherName ? String(course.assignedTeacherName) : null,
+            assignedTeamRole: course.assignedTeamRole ? String(course.assignedTeamRole) : null,
+            assignedTeamRoleLabel: course.assignedTeamRoleLabel ? String(course.assignedTeamRoleLabel) : null,
+          }
+        }),
         checkpoints: (data.checkpoints ?? []).map((c) => ({ name: c.name, hasData: c.hasData })),
         teamTeachers: (data.teamTeachers ?? []).map((item) => ({
           id: String(item.id),
           name: String(item.name ?? ''),
-          role: mapTeamRole(typeof item.role === 'string' ? item.role : null),
+          role: typeof item.role === 'string' ? item.role : '',
           title: item.title ? String(item.title) : undefined,
           status: item.status ? String(item.status) : undefined,
         })),

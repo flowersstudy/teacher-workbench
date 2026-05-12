@@ -241,7 +241,7 @@ export function OverviewView() {
   if (loading && students.length === 0) {
     return (
       <div className="flex h-full items-center justify-center px-6">
-        <EmptyBlock text="正在加载 seed 概览数据…" />
+        <EmptyBlock text="正在加载概览数据..." />
       </div>
     )
   }
@@ -269,7 +269,7 @@ export function OverviewView() {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-lg font-semibold text-[var(--color-text-primary)]">工作台概览</div>
-            <div className="mt-1 text-[12px] text-[var(--color-text-muted)]">已切换为 seed 数据视图，概览信息全部来自真实接口</div>
+            <div className="mt-1 text-[12px] text-[var(--color-text-muted)]">概览信息全部来自真实接口</div>
           </div>
           <button
             type="button"

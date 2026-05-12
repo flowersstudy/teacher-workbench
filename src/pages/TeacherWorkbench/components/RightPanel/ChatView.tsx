@@ -194,7 +194,7 @@ function AddEventModal({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/30" />
-      <div className="relative w-72 rounded-[var(--radius-card)] bg-white p-4 shadow-lg" onClick={(e) => e.stopPropagation()}>
+      <div className="relative w-[min(480px,94vw)] rounded-[var(--radius-card)] bg-white p-4 shadow-lg" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 text-sm font-semibold text-[var(--color-text-primary)]">新增日程</div>
         <div className="space-y-2.5">
           <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded border border-[var(--color-border)] px-2 py-1.5 text-sm outline-none focus:border-[var(--color-primary)]" />

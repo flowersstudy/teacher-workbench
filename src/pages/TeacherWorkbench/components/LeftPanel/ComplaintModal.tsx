@@ -267,7 +267,7 @@ export function ComplaintModal({ student, onClose }: { student: StudentItem; onC
     <div className="fixed inset-0 z-[70] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/40" />
       <div
-        className="relative flex w-[min(520px,90vw)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className="relative flex max-h-[84vh] w-[min(720px,94vw)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -323,7 +323,7 @@ export function ComplaintModal({ student, onClose }: { student: StudentItem; onC
         )}
 
         {/* Content */}
-        <div className="max-h-[55vh] flex-1 overflow-auto px-5 py-4">
+        <div className="max-h-[68vh] flex-1 overflow-auto px-5 py-4">
           {renderStep()}
         </div>
 

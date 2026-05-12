@@ -5,6 +5,7 @@ export type TaskKey =
   | 'pendingReview'
   | 'pendingReport'
   | 'pendingAssign'
+  | 'pendingDiagnosePaper'
   | 'pendingLink'
   | 'liveDrill'
   | 'pendingHandout'
@@ -84,7 +85,7 @@ export interface ChatMessage {
   audioDuration?: number
 }
 
-export type GroupRole = '\u5e26\u6559\u8001\u5e08' | '\u5b66\u7ba1' | '\u6821\u957f' | '\u8bca\u65ad\u8001\u5e08' | '\u5b66\u751f'
+export type GroupRole = '\u5e26\u6559\u8001\u5e08' | '\u5b66\u7ba1' | '\u6821\u957f' | '\u8bca\u65ad\u8001\u5e08' | '\u5237\u9898\u8001\u5e08' | '\u5b66\u751f'
 
 export interface GroupMember {
   role: GroupRole
@@ -167,6 +168,13 @@ export interface QuestionAnswer {
   score?: number
   teacherComment?: string
   reviewedAt?: string
+  checkpoint?: string
+  pointName?: string
+  stageKey?: string
+  taskId?: string
+  feedbackTaskId?: string
+  reviewedFileName?: string
+  fileName?: string
 }
 
 export interface TeacherNote {
@@ -237,7 +245,23 @@ export interface StudentCourseProgress {
   name: string
   subject: string
   progress: number
-  status: 'in_progress' | 'completed' | 'failed'
+  status: 'in_progress' | 'completed' | 'failed' | 'pending'
+  learningPathProgress?: {
+    pointName: string
+    progressPercent: number
+    totalTaskCount: number
+    doneTaskCount: number
+    allDone: boolean
+    currentTaskId: string
+    currentTaskTitle: string
+    currentStageKey: string
+    currentStageLabel: string
+    updatedAt: string
+  } | null
+  assignedTeacherId?: string | null
+  assignedTeacherName?: string | null
+  assignedTeamRole?: string | null
+  assignedTeamRoleLabel?: string | null
 }
 
 export interface StudentTeamTeacher {

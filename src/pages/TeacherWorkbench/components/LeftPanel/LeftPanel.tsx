@@ -3,11 +3,23 @@ import { TaskGrid } from './TaskGrid'
 import { MessageTabs } from './MessageTabs'
 import { ChatList } from './ChatList'
 
-export function LeftPanel({ onLogout }: { onLogout?: () => void }) {
+export function LeftPanel({
+  onLogout,
+  onOpenIdentitySettings,
+  teacherRoleLabel,
+}: {
+  onLogout?: () => void
+  onOpenIdentitySettings?: () => void
+  teacherRoleLabel?: string
+}) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="shrink-0 border-b border-[var(--color-border)]">
-        <TeacherInfo onLogout={onLogout} />
+        <TeacherInfo
+          onLogout={onLogout}
+          onOpenIdentitySettings={onOpenIdentitySettings}
+          teacherRoleLabel={teacherRoleLabel}
+        />
       </div>
 
       <div className="shrink-0">
@@ -22,4 +34,3 @@ export function LeftPanel({ onLogout }: { onLogout?: () => void }) {
     </div>
   )
 }
-

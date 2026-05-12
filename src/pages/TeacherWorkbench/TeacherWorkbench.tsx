@@ -4,15 +4,25 @@ import { TaskModal } from './components/LeftPanel/TaskModal'
 import { ReviewModal } from './components/LeftPanel/ReviewModal'
 import { AbnormalModal } from './components/LeftPanel/AbnormalModal'
 import { AssignStudentModal } from './components/LeftPanel/AssignStudentModal'
+import { DiagnosePaperModal } from './components/LeftPanel/DiagnosePaperModal'
 import { LiveDrillModal } from './components/LeftPanel/LiveDrillModal'
 import { UploadLinkModal } from './components/LeftPanel/UploadLinkModal'
 import { UploadHandoutModal } from './components/LeftPanel/UploadHandoutModal'
 import { UploadReplayModal } from './components/LeftPanel/UploadReplayModal'
+import { ReportUploadWorkspace } from './components/LeftPanel/ReportUploadWorkspace'
 import { StudentFeedbackModal } from './components/LeftPanel/StudentFeedbackModal'
 import { RightPanel } from './components/RightPanel/RightPanel'
 import { useWorkbenchStore } from './store/workbenchStore'
 
-export function TeacherWorkbench({ onLogout }: { onLogout?: () => void }) {
+export function TeacherWorkbench({
+  onLogout,
+  onOpenIdentitySettings,
+  teacherRoleLabel,
+}: {
+  onLogout?: () => void
+  onOpenIdentitySettings?: () => void
+  teacherRoleLabel?: string
+}) {
   const loadCalendarEvents = useWorkbenchStore((s) => s.loadCalendarEvents)
   const loadTaskCounts     = useWorkbenchStore((s) => s.loadTaskCounts)
   const loadTaskItems      = useWorkbenchStore((s) => s.loadTaskItems)
@@ -45,7 +55,11 @@ export function TeacherWorkbench({ onLogout }: { onLogout?: () => void }) {
     <div className="h-screen min-w-[1280px] overflow-hidden bg-[var(--color-page-bg)]">
       <div className="flex h-full w-full">
         <aside className="h-full w-[var(--left-width)] shrink-0 border-r border-[var(--color-border)] bg-[var(--color-bg-left)] shadow-[var(--shadow-xs)]">
-          <LeftPanel onLogout={onLogout} />
+          <LeftPanel
+            onLogout={onLogout}
+            onOpenIdentitySettings={onOpenIdentitySettings}
+            teacherRoleLabel={teacherRoleLabel}
+          />
         </aside>
         <main className="h-full flex-1 bg-[var(--color-page-bg)]">
           <RightPanel />
@@ -55,10 +69,12 @@ export function TeacherWorkbench({ onLogout }: { onLogout?: () => void }) {
       <ReviewModal />
       <AbnormalModal />
       <AssignStudentModal />
+      <DiagnosePaperModal />
       <LiveDrillModal />
       <UploadLinkModal />
       <UploadHandoutModal />
       <UploadReplayModal />
+      <ReportUploadWorkspace />
       <StudentFeedbackModal />
     </div>
   )

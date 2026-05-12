@@ -6,21 +6,25 @@ export type SubmissionFileKind = 'pdf' | 'image' | 'other'
 
 export interface Submission {
   id: string
+  student_id?: string
   student_name: string
   review_type: string
   checkpoint: string
   point_name?: string
   stage_key?: string
   task_id?: string
+  task_label?: string
   deadline: string
   priority: ReviewPriority
   submitted_normal: number
   file_name: string
+  file_kind?: SubmissionFileKind
   submitted_at: string
 }
 
 export interface ReviewItem {
   id: string
+  studentId?: string
   name: string
   avatar: string
   color: string
@@ -37,6 +41,7 @@ export interface ReviewItem {
   deadline: string
   priority: ReviewPriority
   submittedNormal: boolean
+  fileKind?: SubmissionFileKind
 }
 
 export function getSubmissionFileKind(fileName = '', mimeType = ''): SubmissionFileKind {

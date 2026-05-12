@@ -65,7 +65,7 @@ export function UploadHandoutModal() {
     >
       <div className="absolute inset-0 bg-black/30" />
       <div
-        className="relative w-[400px] rounded-[var(--radius-card)] bg-white shadow-lg"
+        className="relative w-[min(560px,94vw)] rounded-[var(--radius-card)] bg-white shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

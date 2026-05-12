@@ -6,7 +6,10 @@ import type { ComplaintRecord, QuestionAnswer, StudentDetailMeta, StudentInfoIte
 import { useWorkbenchStore } from '../../store/workbenchStore'
 import { ComplaintModal } from '../LeftPanel/ComplaintModal'
 import { LearningPathPanel } from './LearningPathPanel'
+import { TheoryLessonEditorModal } from './TheoryLessonEditorModal'
 import { api } from '../../../../lib/api'
+import { teacherCanHandleRole, type TeamRoleKey } from '../../../../lib/teacherRoles'
+import { fetchSubmissionFileUrl, uploadReviewedSubmissionPdf } from '../../api/submissions'
 
 function formatDateTime(value?: string | null) {
   if (!value) return '-'
@@ -38,27 +41,146 @@ function formatNumericValue(value?: number | null, suffix = '') {
   return `${Number(value)}${suffix}`
 }
 
-type TeamRoleKey = 'coach' | 'diagnosis' | 'manager'
 type TeamTeacherOption = {
   id: string
   name: string
   title?: string
+  roles?: string[]
+  roleLabels?: string[]
   role?: string
   roleLabel?: string
 }
 
+type TeacherListResponse = {
+  list?: TeamTeacherOption[]
+}
+type AssignableCourse = {
+  id: string
+  name: string
+  subject: string
+  kind: 'standard' | 'special'
+  description?: string
+  specialType?: 'diagnose' | 'drill'
+  requiredTeamRole?: TeamRoleKey
+  requiredTeamRoleLabel?: string
+}
+
+const CHECKPOINT_ORDER = [
+  '要点不全不准',
+  '提炼转述困难',
+  '对策推导困难',
+  '分析结构不清',
+  '作文立意不准',
+  '作文表达不畅',
+  '作文论证不清',
+  '公文结构不清',
+] as const
+
+const CHECKPOINT_ORDER_MAP = new Map<string, number>(CHECKPOINT_ORDER.map((name, index) => [name, index]))
+
+const TEAM_ROLE_LABELS: Record<TeamRoleKey, string> = {
+  coach: '带教老师',
+  diagnosis: '诊断老师',
+  drill: '刷题老师',
+  manager: '学管老师',
+}
+
 const TEAM_ROLE_CONFIG: Array<{ key: TeamRoleKey; label: string }> = [
+  { key: 'drill', label: TEAM_ROLE_LABELS.drill },
   { key: 'coach', label: '带教老师' },
   { key: 'diagnosis', label: '诊断老师' },
   { key: 'manager', label: '学管老师' },
 ]
 
+const DIAGNOSE_COURSE_NAME = '诊断课'
+
 function normalizeTeamRoleKey(role?: string | null): TeamRoleKey | '' {
   const safeRole = String(role || '')
+  if (safeRole === 'drill') return 'drill'
+  if (safeRole.includes('刷题')) return 'drill'
   if (safeRole === 'coach' || safeRole.includes('带教')) return 'coach'
   if (safeRole === 'diagnosis' || safeRole.includes('诊断')) return 'diagnosis'
   if (safeRole === 'manager' || safeRole.includes('学管')) return 'manager'
   return ''
+}
+
+function getTeacherRoleSummary(teacher: Pick<TeamTeacherOption, 'title' | 'roleLabel' | 'roleLabels' | 'roles' | 'role'>) {
+  if (teacher.title) return teacher.title
+  if (Array.isArray(teacher.roleLabels) && teacher.roleLabels.length > 0) {
+    return teacher.roleLabels.join(' / ')
+  }
+  if (teacher.roleLabel) return teacher.roleLabel
+  if (Array.isArray(teacher.roles) && teacher.roles.length > 0) {
+    return teacher.roles
+      .map((item) => normalizeTeamRoleKey(item))
+      .filter((item): item is TeamRoleKey => Boolean(item))
+      .map((item) => TEAM_ROLE_LABELS[item])
+      .join(' / ')
+  }
+  return teacher.role || '-'
+}
+
+function normalizeTeacherOption(teacher: TeamTeacherOption): TeamTeacherOption {
+  return {
+    ...teacher,
+    id: String(teacher.id || ''),
+    name: String(teacher.name || ''),
+    title: teacher.title ? String(teacher.title) : '',
+    roles: Array.isArray(teacher.roles) ? teacher.roles.map((item) => String(item || '')) : [],
+    roleLabels: Array.isArray(teacher.roleLabels) ? teacher.roleLabels.map((item) => String(item || '')) : [],
+    role: teacher.role ? String(teacher.role) : '',
+    roleLabel: teacher.roleLabel ? String(teacher.roleLabel) : '',
+  }
+}
+
+async function fetchAssignableTeacherOptions(): Promise<TeamTeacherOption[]> {
+  try {
+    const directList = await api.get<TeamTeacherOption[]>('/api/teacher/assignable-teachers')
+    if (Array.isArray(directList)) {
+      return directList.map(normalizeTeacherOption)
+    }
+  } catch {}
+
+  const result = await api.get<TeacherListResponse>('/api/teacher/list')
+  return Array.isArray(result.list) ? result.list.map(normalizeTeacherOption) : []
+}
+
+function isSpecialCourseId(courseId?: string | number | null) {
+  return String(courseId || '').startsWith('special_')
+}
+
+function getCourseTypeLabel(courseId?: string | number | null) {
+  return isSpecialCourseId(courseId) ? '专项课' : '卡点课'
+}
+
+function getCourseRequiredTeamRole(course?: Pick<AssignableCourse, 'kind' | 'specialType' | 'requiredTeamRole'> | null): TeamRoleKey {
+  const explicitRole = normalizeTeamRoleKey(course?.requiredTeamRole)
+  if (explicitRole) {
+    return explicitRole
+  }
+  if (course?.kind === 'special') {
+    return course.specialType === 'diagnose' ? 'diagnosis' : 'drill'
+  }
+  return 'coach'
+}
+
+function getResponsibleTeacherMeta(
+  course: {
+    id?: string
+    assignedTeacherName?: string | null
+    assignedTeamRole?: string | null
+    assignedTeamRoleLabel?: string | null
+  },
+  teamTeacherMap: Partial<Record<TeamRoleKey, { name: string }>>,
+) {
+  const fallbackRole = normalizeTeamRoleKey(course.assignedTeamRole)
+    || (String(course.id || '').includes('special_drill') ? 'drill' : isSpecialCourseId(course.id) ? 'diagnosis' : 'coach')
+  const fallbackTeacher = fallbackRole ? teamTeacherMap[fallbackRole] : undefined
+
+  return {
+    teacherName: course.assignedTeacherName || fallbackTeacher?.name || '',
+    roleLabel: course.assignedTeamRoleLabel || TEAM_ROLE_LABELS[fallbackRole],
+  }
 }
 
 function Section({
@@ -127,8 +249,54 @@ function StudentInfoCard({
   )
 }
 
-function SubmissionCard({ answer }: { answer: QuestionAnswer }) {
+function SubmissionCard({
+  answer,
+  onUpdated,
+}: {
+  answer: QuestionAnswer
+  onUpdated: () => Promise<void>
+}) {
   const reviewed = answer.status === 'reviewed'
+  const [reviewFile, setReviewFile] = useState<File | null>(null)
+  const [reviewFileName, setReviewFileName] = useState(answer.reviewedFileName || '')
+  const [previewing, setPreviewing] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handlePreviewSubmission() {
+    setPreviewing(true)
+    setError('')
+    try {
+      const url = await fetchSubmissionFileUrl(answer.id)
+      window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '打开原作业失败')
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
+  async function handleSubmitReview() {
+    setSubmitting(true)
+    setError('')
+    try {
+      if (reviewFile) {
+        const result = await uploadReviewedSubmissionPdf(answer.id, reviewFile)
+        setReviewFileName(result.reviewedFileName || reviewFile.name)
+      } else if (!reviewFileName) {
+        throw new Error('请先上传批改版 PDF')
+      }
+
+      await api.put(`/api/submissions/${answer.id}/grade`, {})
+      setReviewFile(null)
+      await onUpdated()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '提交批改失败')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div className="rounded-xl border border-[var(--color-border)] p-3">
@@ -153,6 +321,63 @@ function SubmissionCard({ answer }: { answer: QuestionAnswer }) {
 
       <div className="mt-3 rounded-xl bg-[var(--color-bg-left)] px-3 py-2.5 text-xs leading-6 text-[var(--color-text-primary)]">
         {answer.studentAnswer}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-text-muted)]">
+        {answer.pointName ? (
+          <span className="rounded-full border border-[var(--color-border)] bg-white px-2 py-1">
+            {answer.pointName}
+          </span>
+        ) : null}
+        {answer.stageKey ? (
+          <span className="rounded-full border border-[var(--color-border)] bg-white px-2 py-1">
+            {answer.stageKey}
+          </span>
+        ) : null}
+        {answer.fileName ? (
+          <span className="truncate">{answer.fileName}</span>
+        ) : null}
+      </div>
+
+      <div className="mt-3 rounded-xl border border-dashed border-[var(--color-border)] px-3 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={previewing}
+            onClick={() => void handlePreviewSubmission()}
+            className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] disabled:opacity-50"
+          >
+            {previewing ? '打开中…' : '查看原作业'}
+          </button>
+          <label className="cursor-pointer rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]">
+            上传批改 PDF
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0] || null
+                setReviewFile(file)
+                setReviewFileName(file?.name || answer.reviewedFileName || '')
+                setError('')
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={submitting || (!reviewFile && !reviewFileName)}
+            onClick={() => void handleSubmitReview()}
+            className="rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+          >
+            {submitting ? '提交中…' : (reviewed ? '重新发送批改' : '提交批改反馈')}
+          </button>
+        </div>
+        <div className="mt-2 text-[11px] text-[var(--color-text-muted)]">
+          当前批改文件：{reviewFileName || '未上传'}
+        </div>
+        {error ? (
+          <div className="mt-2 text-[11px] text-red-500">{error}</div>
+        ) : null}
       </div>
 
       {reviewed && (
@@ -258,22 +483,29 @@ export function StudentDetailView({
   const [_reviewPointStatuses, setReviewPointStatuses] = useState<ReviewPointStatus[]>([])
   const [reviewOverviewData, setReviewOverviewData] = useState<ReviewOverview | null>(null)
   const [showReviewModal, setShowReviewModal] = useState(false)
+  const [showTheoryEditor, setShowTheoryEditor] = useState(false)
+  const [learningPathVersion, setLearningPathVersion] = useState(0)
   const [infoDraft, setInfoDraft] = useState('')
   const [infoSaving, setInfoSaving] = useState(false)
   const [assignOpen, setAssignOpen] = useState(false)
-  const [allCourses, setAllCourses] = useState<{ id: number; name: string; subject: string }[]>([])
+  const [allCourses, setAllCourses] = useState<AssignableCourse[]>([])
   const [assigning, setAssigning] = useState(false)
+  const [selectedCourseId, setSelectedCourseId] = useState('')
+  const [assignmentTeacherId, setAssignmentTeacherId] = useState('')
+  const [assignError, setAssignError] = useState('')
   const [teamManagerOpen, setTeamManagerOpen] = useState(false)
   const [teamTeacherOptions, setTeamTeacherOptions] = useState<TeamTeacherOption[]>([])
   const [teamDraft, setTeamDraft] = useState<Record<TeamRoleKey, string>>({
     coach: '',
     diagnosis: '',
+    drill: '',
     manager: '',
   })
   const [teamSaving, setTeamSaving] = useState(false)
 
   const teacherName = useWorkbenchStore((state) => state.teacherName)
   const openAssignStudent = useWorkbenchStore((state) => state.openAssignStudent)
+  const openDiagnosePaperModal = useWorkbenchStore((state) => state.openDiagnosePaperModal)
   const notesMap = useWorkbenchStore((state) => state.notesMap)
   const openNotes = useWorkbenchStore((state) => state.openNotes)
   const loadNotes = useWorkbenchStore((state) => state.loadNotes)
@@ -293,22 +525,68 @@ export function StudentDetailView({
 
   const openAssignModal = useCallback(async () => {
     setAssignOpen(true)
-    if (allCourses.length === 0) {
-      const data = await api.get<{ id: number; name: string; subject: string }[]>('/api/teacher/courses')
-      setAllCourses(data)
-    }
-  }, [allCourses.length])
+    setSelectedCourseId('')
+    setAssignmentTeacherId('')
+    setAssignError('')
 
-  const assignCourse = useCallback(async (courseId: number) => {
+    const [courseList, teacherList] = await Promise.all([
+      allCourses.length === 0
+        ? api.get<AssignableCourse[]>('/api/teacher/courses')
+        : Promise.resolve(allCourses),
+      teamTeacherOptions.length === 0
+        ? fetchAssignableTeacherOptions()
+        : Promise.resolve(teamTeacherOptions),
+    ])
+
+    if (allCourses.length === 0) {
+      setAllCourses(courseList.map((course) => ({
+        id: String(course.id),
+        name: course.name,
+        subject: course.subject,
+        description: course.description,
+        kind: course.kind === 'special' ? 'special' : 'standard',
+        specialType: course.specialType,
+        requiredTeamRole: getCourseRequiredTeamRole(course),
+        requiredTeamRoleLabel: course.requiredTeamRoleLabel || TEAM_ROLE_LABELS[getCourseRequiredTeamRole(course)],
+      })))
+    }
+
+    if (teamTeacherOptions.length === 0) {
+      setTeamTeacherOptions(teacherList)
+    }
+  }, [allCourses, teamTeacherOptions])
+
+  const assignCourse = useCallback(async () => {
+    const course = allCourses.find((item) => item.id === selectedCourseId)
+    if (!course || !assignmentTeacherId) {
+      return
+    }
+
     setAssigning(true)
+    setAssignError('')
     try {
-      await api.post(`/api/teacher/students/${student.id}/courses`, { courseId })
+      await api.post(`/api/teacher/students/${student.id}/course-assignments`, course.kind === 'special' && course.specialType
+        ? {
+            courseKind: 'special',
+            specialType: course.specialType,
+            teacherId: Number(assignmentTeacherId),
+          }
+        : {
+            courseKind: 'standard',
+            courseId: Number(course.id),
+            teacherId: Number(assignmentTeacherId),
+          })
       await loadStudentInfo(student.id)
       setAssignOpen(false)
+      setSelectedCourseId('')
+      setAssignmentTeacherId('')
+      setAssignError('')
+    } catch (error) {
+      setAssignError(error instanceof Error ? error.message : '分配失败，请稍后重试')
     } finally {
       setAssigning(false)
     }
-  }, [student.id, loadStudentInfo])
+  }, [allCourses, assignmentTeacherId, loadStudentInfo, selectedCourseId, student.id])
 
   useEffect(() => {
     void loadStudentInfo(student.id)
@@ -351,9 +629,46 @@ export function StudentDetailView({
       ?? detailMeta?.courses?.[0]
     return activeCourse?.name || student.subject || ''
   }, [detailMeta?.courses, student.subject])
-  const checkpointTabs = detailMeta?.checkpoints ?? []
+  const specialCourseNames = useMemo(() => (
+    new Set(
+      (detailMeta?.courses ?? [])
+        .filter((course) => isSpecialCourseId(course.id))
+        .map((course) => String(course.name || '').trim())
+        .filter(Boolean),
+    )
+  ), [detailMeta?.courses])
+  const checkpointTabs = useMemo(() => {
+    const baseTabs = detailMeta?.checkpoints ?? []
+    return baseTabs.filter((checkpoint) => !specialCourseNames.has(String(checkpoint.name || '').trim()))
+  }, [detailMeta?.checkpoints, specialCourseNames])
   const selectedCheckpoint = checkpointTabs.find((checkpoint) => checkpoint.name === activeCheckpoint) ?? null
+  const assignedCourseMap = useMemo(
+    () => new Map((detailMeta?.courses ?? []).map((course) => [String(course.id), course])),
+    [detailMeta?.courses],
+  )
+  const visibleAssignableCourses = useMemo(
+    () => allCourses.filter((course) => course.kind === 'special' || !assignedCourseMap.has(course.id)),
+    [allCourses, assignedCourseMap],
+  )
+  const orderedVisibleAssignableCourses = useMemo(() => (
+    [...visibleAssignableCourses].sort((left, right) => {
+      const leftSpecialOrder = left.specialType === 'diagnose' ? 0 : left.specialType === 'drill' ? 1 : 2
+      const rightSpecialOrder = right.specialType === 'diagnose' ? 0 : right.specialType === 'drill' ? 1 : 2
 
+      if (leftSpecialOrder !== rightSpecialOrder) {
+        return leftSpecialOrder - rightSpecialOrder
+      }
+
+      const leftCheckpointOrder = CHECKPOINT_ORDER_MAP.get(left.name) ?? Number.MAX_SAFE_INTEGER
+      const rightCheckpointOrder = CHECKPOINT_ORDER_MAP.get(right.name) ?? Number.MAX_SAFE_INTEGER
+
+      if (leftCheckpointOrder !== rightCheckpointOrder) {
+        return leftCheckpointOrder - rightCheckpointOrder
+      }
+
+      return left.name.localeCompare(right.name, 'zh-CN')
+    })
+  ), [visibleAssignableCourses])
   const profileItems = useMemo(() => ([
     { label: '入学日期', value: formatDateOnly(detailMeta?.joinDate) },
     { label: '累计课次', value: `${detailMeta?.sessionCount ?? 0}` },
@@ -390,6 +705,9 @@ export function StudentDetailView({
   ), [reviewOverviewData])
 
   const pendingCount = answers.filter((item) => item.status === 'pending').length
+  const reloadStudentDetail = useCallback(async () => {
+    await loadStudentInfo(student.id)
+  }, [loadStudentInfo, student.id])
   const teamTeacherMap = useMemo(() => {
     const entries = (detailMeta?.teamTeachers ?? []).reduce((result, teacher) => {
       const roleKey = normalizeTeamRoleKey(teacher.role)
@@ -402,10 +720,29 @@ export function StudentDetailView({
     return entries
   }, [detailMeta?.teamTeachers])
   const teamTeacherOptionsByRole = useMemo(() => ({
-    coach: teamTeacherOptions.filter((teacher) => normalizeTeamRoleKey(teacher.role) === 'coach'),
-    diagnosis: teamTeacherOptions.filter((teacher) => normalizeTeamRoleKey(teacher.role) === 'diagnosis'),
-    manager: teamTeacherOptions.filter((teacher) => normalizeTeamRoleKey(teacher.role) === 'manager'),
+    coach: teamTeacherOptions.filter((teacher) => teacherCanHandleRole(teacher, 'coach')),
+    diagnosis: teamTeacherOptions.filter((teacher) => teacherCanHandleRole(teacher, 'diagnosis')),
+    drill: teamTeacherOptions.filter((teacher) => teacherCanHandleRole(teacher, 'drill')),
+    manager: teamTeacherOptions.filter((teacher) => teacherCanHandleRole(teacher, 'manager')),
   }), [teamTeacherOptions])
+  const selectedCourse = useMemo(
+    () => orderedVisibleAssignableCourses.find((course) => course.id === selectedCourseId) ?? null,
+    [orderedVisibleAssignableCourses, selectedCourseId],
+  )
+  const selectedCourseRequiredRole = selectedCourse ? getCourseRequiredTeamRole(selectedCourse) : null
+  const selectedCourseTeacherOptions = selectedCourseRequiredRole
+    ? teamTeacherOptionsByRole[selectedCourseRequiredRole]
+    : []
+  const diagnoseCourse = useMemo(
+    () => (detailMeta?.courses ?? []).find((course) => course.name === DIAGNOSE_COURSE_NAME) ?? null,
+    [detailMeta?.courses],
+  )
+  const diagnoseAnchorPointName = useMemo(() => (
+    selectedCheckpoint?.name
+    || checkpointTabs.find((checkpoint) => checkpoint.hasData)?.name
+    || checkpointTabs[0]?.name
+    || ''
+  ), [checkpointTabs, selectedCheckpoint?.name])
 
   useEffect(() => {
     setActiveCheckpoint('')
@@ -432,7 +769,7 @@ export function StudentDetailView({
         return current
       }
 
-      const preferred = checkpointTabs.find((checkpoint) => checkpoint.name === learningPathPointName && checkpoint.hasData)
+      const preferred = checkpointTabs.find((checkpoint) => checkpoint.name === learningPathPointName)
         ?? checkpointTabs.find((checkpoint) => checkpoint.hasData)
         ?? checkpointTabs[0]
 
@@ -463,13 +800,14 @@ export function StudentDetailView({
     setTeamDraft({
       coach: teamTeacherMap.coach?.id ?? '',
       diagnosis: teamTeacherMap.diagnosis?.id ?? '',
+      drill: teamTeacherMap.drill?.id ?? '',
       manager: teamTeacherMap.manager?.id ?? '',
     })
     setTeamManagerOpen(true)
 
     if (teamTeacherOptions.length > 0) return
-    const result = await api.get<{ list: TeamTeacherOption[] }>('/api/teacher/list')
-    setTeamTeacherOptions(Array.isArray(result.list) ? result.list : [])
+    const teacherList = await fetchAssignableTeacherOptions()
+    setTeamTeacherOptions(teacherList)
   }
 
   async function saveTeamTeachers() {
@@ -489,6 +827,27 @@ export function StudentDetailView({
     }
   }
 
+  function closeAssignModal() {
+    setAssignOpen(false)
+    setSelectedCourseId('')
+    setAssignmentTeacherId('')
+    setAssignError('')
+  }
+
+  function selectCourseForAssignment(course: AssignableCourse) {
+    const requiredRole = getCourseRequiredTeamRole(course)
+    const existingCourse = assignedCourseMap.get(course.id)
+    setSelectedCourseId(course.id)
+    setAssignError('')
+    setAssignmentTeacherId(
+      existingCourse?.assignedTeacherId
+        ? String(existingCourse.assignedTeacherId)
+        : teamTeacherMap[requiredRole]?.id
+          ? String(teamTeacherMap[requiredRole]?.id)
+          : '',
+    )
+  }
+
   function openCheckpointAssignModal(checkpointName: string) {
     const assignItem: TaskListItem = {
       id: `assign_student_${student.id}`,
@@ -504,6 +863,26 @@ export function StudentDetailView({
       preferredTeacherId: teamTeacherMap.coach?.id ? String(teamTeacherMap.coach.id) : '',
     }
     openAssignStudent(assignItem)
+  }
+
+  function openDiagnosePaperForCurrentStudent() {
+    const pointName = diagnoseAnchorPointName
+    const preferredTeacherId = teamTeacherMap.diagnosis?.id
+      || diagnoseCourse?.assignedTeacherId
+      || ''
+
+    openDiagnosePaperModal({
+      id: `diagnose_paper_student_${student.id}`,
+      name: student.name,
+      subtitle: `${pointName} · 待配诊断卷`,
+      avatar: student.avatar,
+      color: student.color,
+      actionLabel: '去配置',
+      contactId: student.contactId,
+      studentId: student.id,
+      pointName,
+      preferredTeacherId,
+    })
   }
 
   return (
@@ -637,7 +1016,7 @@ export function StudentDetailView({
                   </button>
                 )}
               >
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-4">
                   {TEAM_ROLE_CONFIG.map((role) => {
                     const teacher = teamTeacherMap[role.key]
                     return (
@@ -653,7 +1032,7 @@ export function StudentDetailView({
                             className="mt-2 text-left"
                           >
                             <div className="text-sm font-semibold text-[var(--color-text-primary)]">{teacher.name}</div>
-                            <div className="mt-1 text-xs text-[var(--color-text-secondary)]">{teacher.title || teacher.role || '-'}</div>
+                            <div className="mt-1 text-xs text-[var(--color-text-secondary)]">{getTeacherRoleSummary(teacher)}</div>
                           </button>
                         ) : (
                           <div className="mt-2 text-xs text-[var(--color-text-muted)]">未设置</div>
@@ -666,7 +1045,7 @@ export function StudentDetailView({
 
               {teamManagerOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setTeamManagerOpen(false)}>
-                  <div className="w-[420px] rounded-2xl bg-white p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
+                  <div className="w-[min(720px,calc(100vw-2rem))] rounded-2xl bg-white p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
                     <div className="mb-4 text-sm font-semibold text-[var(--color-text-primary)]">管理团队老师</div>
                     <div className="space-y-4">
                       {TEAM_ROLE_CONFIG.map((role) => (
@@ -722,20 +1101,44 @@ export function StudentDetailView({
               >
                 {detailMeta?.courses?.length ? (
                   <div className="space-y-3">
-                    {detailMeta.courses.map((course) => (
-                      <div key={course.id} className="rounded-xl border border-[var(--color-border)] p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-semibold text-[var(--color-text-primary)]">{course.name}</div>
-                            <div className="mt-1 text-xs text-[var(--color-text-secondary)]">{course.subject}</div>
+                    {detailMeta.courses.map((course) => {
+                      const responsibleTeacher = getResponsibleTeacherMeta(course, teamTeacherMap)
+                      const liveProgress = course.learningPathProgress
+                      const progressHint = liveProgress
+                        ? (
+                            liveProgress.allDone
+                              ? '学习路径已完成'
+                              : [liveProgress.currentStageLabel, liveProgress.currentTaskTitle].filter(Boolean).join(' / ')
+                          )
+                        : ''
+                      return (
+                        <div key={course.id} className="rounded-xl border border-[var(--color-border)] p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-sm font-semibold text-[var(--color-text-primary)]">{course.name}</div>
+                                <span className="rounded-full bg-[var(--color-bg-left)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-text-secondary)]">
+                                  {getCourseTypeLabel(course.id)}
+                                </span>
+                              </div>
+                              <div className="mt-1 text-xs text-[var(--color-text-secondary)]">{course.subject}</div>
+                              <div className="mt-1 text-xs text-[var(--color-text-muted)]">
+                                负责老师：{responsibleTeacher.teacherName || '未设置'}{responsibleTeacher.roleLabel ? ` / ${responsibleTeacher.roleLabel}` : ''}
+                              </div>
+                              {progressHint ? (
+                                <div className="mt-1 text-xs text-[var(--color-text-muted)]">
+                                  实时进度：{progressHint}
+                                </div>
+                              ) : null}
+                            </div>
+                            <div className="text-xs text-[var(--color-text-muted)]">{course.progress}%</div>
                           </div>
-                          <div className="text-xs text-[var(--color-text-muted)]">{course.progress}%</div>
+                          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--color-bg-left)]">
+                            <div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${Math.max(0, Math.min(100, course.progress))}%` }} />
+                          </div>
                         </div>
-                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--color-bg-left)]">
-                          <div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${Math.max(0, Math.min(100, course.progress))}%` }} />
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 ) : (
                   <div className="text-xs text-[var(--color-text-muted)]">暂无课程进度</div>
@@ -743,35 +1146,133 @@ export function StudentDetailView({
               </Section>
 
               {assignOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setAssignOpen(false)}>
-                  <div className="w-80 rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-                    <div className="mb-4 text-sm font-semibold text-[var(--color-text-primary)]">选择要分配的课程</div>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={closeAssignModal}>
+                  <div className="max-h-[calc(100vh-2rem)] w-[min(56rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                    <div className="mb-1 text-sm font-semibold text-[var(--color-text-primary)]">分配课程</div>
+                    <div className="mb-4 text-xs leading-5 text-[var(--color-text-muted)]">
+                      诊断课、刷题课和八大卡点都统一在这里分配。
+                    </div>
                     {allCourses.length === 0 ? (
                       <div className="text-xs text-[var(--color-text-muted)]">加载中...</div>
                     ) : (
-                      <div className="max-h-72 space-y-2 overflow-y-auto">
-                        {allCourses
-                          .filter((c) => !detailMeta?.courses?.some((sc) => String(sc.id) === String(c.id)))
-                          .map((course) => (
-                            <button
-                              key={course.id}
-                              type="button"
-                              disabled={assigning}
-                              onClick={() => void assignCourse(course.id)}
-                              className="w-full rounded-xl border border-[var(--color-border)] p-3 text-left hover:border-[var(--color-primary)] hover:bg-[var(--color-bg-left)] disabled:opacity-50"
-                            >
-                              <div className="text-sm font-medium text-[var(--color-text-primary)]">{course.name}</div>
-                              <div className="mt-0.5 text-xs text-[var(--color-text-secondary)]">{course.subject}</div>
-                            </button>
-                          ))}
-                        {allCourses.filter((c) => !detailMeta?.courses?.some((sc) => String(sc.id) === String(c.id))).length === 0 && (
-                          <div className="text-xs text-[var(--color-text-muted)]">该学生已分配所有课程</div>
+                      <div className="grid h-[60vh] gap-4 overflow-hidden md:grid-cols-[18rem_minmax(0,1fr)]">
+                        <div className="min-h-0 overflow-y-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-left)] p-4">
+                          <div className="text-sm font-semibold text-[var(--color-text-primary)]">负责老师</div>
+                          {selectedCourse ? (
+                            <>
+                              <div className="mt-1 text-xs text-[var(--color-text-muted)]">
+                                当前课程要求：{selectedCourse.requiredTeamRoleLabel || (selectedCourseRequiredRole ? TEAM_ROLE_LABELS[selectedCourseRequiredRole] : '')}
+                              </div>
+                              <div className="mt-3 space-y-2 pb-1">
+                                {selectedCourseTeacherOptions.length ? (
+                                  selectedCourseTeacherOptions.map((teacher) => (
+                                    <button
+                                      key={teacher.id}
+                                      type="button"
+                                      disabled={assigning}
+                                      onClick={() => setAssignmentTeacherId(teacher.id)}
+                                      className={`w-full rounded-xl border px-3 py-3 text-left transition-colors disabled:opacity-50 ${
+                                        assignmentTeacherId === teacher.id
+                                          ? 'border-[var(--color-primary)] bg-white'
+                                          : 'border-[var(--color-border)] bg-white hover:border-[var(--color-primary)]'
+                                      }`}
+                                    >
+                                      <div className="text-sm font-medium text-[var(--color-text-primary)]">{teacher.name}</div>
+                                      <div className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                                        {getTeacherRoleSummary(teacher)}
+                                      </div>
+                                    </button>
+                                  ))
+                                ) : (
+                                  <div className="rounded-xl bg-white px-3 py-3 text-xs leading-5 text-[var(--color-text-muted)]">
+                                    当前没有可选的{selectedCourse.requiredTeamRoleLabel || (selectedCourseRequiredRole ? TEAM_ROLE_LABELS[selectedCourseRequiredRole] : '老师')}。
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="mt-3 rounded-xl bg-white px-3 py-3 text-xs leading-5 text-[var(--color-text-muted)]">
+                              先在右侧选择课程，再在左侧选择对应角色的负责老师。
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="min-h-0 overflow-y-auto pr-1">
+                        {orderedVisibleAssignableCourses.length ? (
+                          <div className="space-y-2">
+                            {orderedVisibleAssignableCourses.map((course) => (
+                              <button
+                                key={course.id}
+                                type="button"
+                                disabled={assigning}
+                                onClick={() => selectCourseForAssignment(course)}
+                                className={`w-full rounded-xl border p-3 text-left transition-colors disabled:opacity-50 ${
+                                  selectedCourseId === course.id
+                                    ? 'border-[var(--color-primary)] bg-[var(--color-bg-left)]'
+                                    : 'border-[var(--color-border)] hover:border-[var(--color-primary)] hover:bg-[var(--color-bg-left)]'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <div className="text-sm font-medium text-[var(--color-text-primary)]">{course.name}</div>
+                                  </div>
+                                  <span className="rounded-full bg-[var(--color-bg-left)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-text-secondary)]">
+                                    课程
+                                  </span>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="rounded-xl bg-[var(--color-bg-left)] px-3 py-3 text-xs text-[var(--color-text-muted)]">
+                            该学生已分配所有可开通课程。
+                          </div>
                         )}
+
+                        </div>
                       </div>
                     )}
+                    {selectedCourse ? (
+                      <div className="mt-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-left)] p-4">
+                        <div className="text-sm font-semibold text-[var(--color-text-primary)]">{selectedCourse.name}</div>
+                        <div className="mt-3 text-[11px] text-[var(--color-text-muted)]">
+                          必选负责老师角色：{selectedCourse.requiredTeamRoleLabel || (selectedCourseRequiredRole ? TEAM_ROLE_LABELS[selectedCourseRequiredRole] : '')}
+                        </div>
+                        <select
+                          value={assignmentTeacherId}
+                          onChange={(event) => setAssignmentTeacherId(event.target.value)}
+                          className="mt-3 w-full rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]"
+                        >
+                          <option value="">请选择负责老师</option>
+                          {selectedCourseTeacherOptions.map((teacher) => (
+                            <option key={teacher.id} value={teacher.id}>
+                              {teacher.name}{teacher.title ? ` / ${teacher.title}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedCourseTeacherOptions.length === 0 ? (
+                          <div className="mt-3 text-xs text-[var(--color-text-muted)]">
+                            当前没有可选的{selectedCourse.requiredTeamRoleLabel || (selectedCourseRequiredRole ? TEAM_ROLE_LABELS[selectedCourseRequiredRole] : '老师')}。
+                          </div>
+                        ) : null}
+                        {assignError ? (
+                          <div className="mt-3 text-xs text-red-500">
+                            {assignError}
+                          </div>
+                        ) : null}
+                        <button
+                          type="button"
+                          disabled={assigning || !assignmentTeacherId}
+                          onClick={() => void assignCourse()}
+                          className="mt-4 w-full rounded-xl bg-[var(--color-primary)] py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                        >
+                          {assigning ? '保存中...' : '确认分配'}
+                        </button>
+                      </div>
+                    ) : null}
                     <button
                       type="button"
-                      onClick={() => setAssignOpen(false)}
+                      onClick={closeAssignModal}
                       className="mt-4 w-full rounded-xl border border-[var(--color-border)] py-2 text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-left)]"
                     >
                       取消
@@ -901,7 +1402,13 @@ export function StudentDetailView({
 
                     {selectedCheckpoint ? (
                       selectedCheckpoint.hasData ? (
-                        <LearningPathPanel studentId={student.id} pointName={selectedCheckpoint.name} />
+                        <LearningPathPanel
+                          key={`${student.id}_${selectedCheckpoint.name}_${learningPathVersion}`}
+                          studentId={student.id}
+                          pointName={selectedCheckpoint.name}
+                          onOpenDiagnosePaper={openDiagnosePaperForCurrentStudent}
+                          onOpenTheoryEditor={() => setShowTheoryEditor(true)}
+                        />
                       ) : (
                         <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-white px-4 py-8 text-center">
                           <div className="text-sm text-[var(--color-text-muted)]">
@@ -931,7 +1438,11 @@ export function StudentDetailView({
                 {answers.length ? (
                   <div className="space-y-3">
                     {answers.map((answer) => (
-                      <SubmissionCard key={answer.id} answer={answer} />
+                      <SubmissionCard
+                        key={answer.id}
+                        answer={answer}
+                        onUpdated={reloadStudentDetail}
+                      />
                     ))}
                   </div>
                 ) : (
@@ -955,6 +1466,19 @@ export function StudentDetailView({
           onSaved={(data) => {
             setReviewOverviewData(data)
             setReviewPointStatuses(Array.isArray(data.pointStatuses) ? data.pointStatuses : [])
+          }}
+        />
+      )}
+
+      {showTheoryEditor && selectedCheckpoint && selectedCheckpoint.hasData && (
+        <TheoryLessonEditorModal
+          studentId={student.id}
+          pointName={selectedCheckpoint.name}
+          onClose={() => setShowTheoryEditor(false)}
+          onSaved={() => {
+            setShowTheoryEditor(false)
+            setLearningPathVersion((current) => current + 1)
+            void reloadStudentDetail()
           }}
         />
       )}
